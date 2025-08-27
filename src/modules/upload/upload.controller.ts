@@ -18,7 +18,10 @@ import {
   ApiConsumes,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UploadService, UploadedFile as CustomUploadedFile } from "./upload.service";
+import {
+  UploadService,
+  UploadedFile as CustomUploadedFile,
+} from "./upload.service";
 
 @ApiTags("Upload")
 @Controller("upload")
@@ -48,7 +51,7 @@ export class UploadController {
     };
 
     const result = await this.uploadService.uploadFile(uploadedFile);
-    
+
     if (!result.success) {
       throw new BadRequestException(result.error);
     }
@@ -70,7 +73,7 @@ export class UploadController {
       throw new BadRequestException("No files provided");
     }
 
-    const uploadedFiles: CustomUploadedFile[] = files.map(file => ({
+    const uploadedFiles: CustomUploadedFile[] = files.map((file) => ({
       fieldname: file.fieldname,
       originalname: file.originalname,
       encoding: file.encoding,
@@ -80,9 +83,9 @@ export class UploadController {
     }));
 
     const results = await this.uploadService.uploadMultipleFiles(uploadedFiles);
-    
-    const successful = results.filter(r => r.success);
-    const failed = results.filter(r => !r.success);
+
+    const successful = results.filter((r) => r.success);
+    const failed = results.filter((r) => !r.success);
 
     return {
       message: `${successful.length} files uploaded successfully, ${failed.length} failed`,
@@ -115,9 +118,9 @@ export class UploadController {
     // For demo purposes, using a dummy user ID
     // In real implementation, extract user ID from JWT token
     const userId = "user-123";
-    
+
     const result = await this.uploadService.uploadAvatar(uploadedFile, userId);
-    
+
     if (!result.success) {
       throw new BadRequestException(result.error);
     }
@@ -137,7 +140,7 @@ export class UploadController {
     @Param("filename") filename: string,
   ) {
     const fileInfo = this.uploadService.getFileInfo(filename, folder);
-    
+
     if (!fileInfo.exists) {
       throw new BadRequestException("File not found");
     }
@@ -159,7 +162,9 @@ export class UploadController {
   async getUploadConfig() {
     return {
       maxFileSize: this.uploadService.getMaxFileSize(),
-      maxFileSizeMB: Math.round(this.uploadService.getMaxFileSize() / 1024 / 1024),
+      maxFileSizeMB: Math.round(
+        this.uploadService.getMaxFileSize() / 1024 / 1024,
+      ),
       allowedFileTypes: this.uploadService.getAllowedFileTypes(),
       message: "Upload configuration retrieved successfully",
     };

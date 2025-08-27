@@ -1,9 +1,13 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { DataSource, Connection } from "typeorm";
+import { DataSource } from "typeorm";
 import { Connection as MongoConnection } from "mongoose";
 import { InjectConnection } from "@nestjs/mongoose";
 import * as fs from "fs";
 import * as os from "os";
+import { promisify } from "util";
+import { exec } from "child_process";
+
+const execAsync = promisify(exec);
 
 export interface HealthStatus {
   status: "healthy" | "unhealthy" | "degraded";
@@ -57,14 +61,26 @@ export class HealthService {
     ]);
 
     return {
-      postgres: postgres.status === "fulfilled" ? postgres.value : {
-        status: "unhealthy",
-        message: postgres.status === "rejected" ? postgres.reason.message : "Unknown error",
-      },
-      mongodb: mongodb.status === "fulfilled" ? mongodb.value : {
-        status: "unhealthy",
-        message: mongodb.status === "rejected" ? mongodb.reason.message : "Unknown error",
-      },
+      postgres:
+        postgres.status === "fulfilled"
+          ? postgres.value
+          : {
+              status: "unhealthy",
+              message:
+                postgres.status === "rejected"
+                  ? postgres.reason.message
+                  : "Unknown error",
+            },
+      mongodb:
+        mongodb.status === "fulfilled"
+          ? mongodb.value
+          : {
+              status: "unhealthy",
+              message:
+                mongodb.status === "rejected"
+                  ? mongodb.reason.message
+                  : "Unknown error",
+            },
     };
   }
 
@@ -122,21 +138,18 @@ export class HealthService {
     }
   }
 
-  getSystemHealth(): SystemHealth {
+  async getSystemHealth(): Promise<SystemHealth> {
     const memoryUsage = process.memoryUsage();
     const totalMemory = os.totalmem();
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
 
-    // Disk usage (simplified - in production, use proper disk space calculation)
-    const stats = fs.statSync(process.cwd());
-    const diskTotal = 100 * 1024 * 1024 * 1024; // 100GB default
-    const diskFree = 50 * 1024 * 1024 * 1024; // 50GB default
-    const diskUsed = diskTotal - diskFree;
+    // Get real disk usage
+    const diskUsage = await this.getRealDiskUsage();
 
     const heapPercentage = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
     const systemMemoryPercentage = (usedMemory / totalMemory) * 100;
-    const diskPercentage = (diskUsed / diskTotal) * 100;
+    const diskPercentage = (diskUsage.used / diskUsage.total) * 100;
 
     return {
       memory: {
@@ -155,9 +168,9 @@ export class HealthService {
       disk: {
         status: this.getDiskStatus(diskPercentage),
         usage: {
-          total: diskTotal,
-          free: diskFree,
-          used: diskUsed,
+          total: diskUsage.total,
+          free: diskUsage.free,
+          used: diskUsage.used,
           percentage: Math.round(diskPercentage * 100) / 100,
         },
       },
@@ -166,16 +179,128 @@ export class HealthService {
     };
   }
 
-  private getMemoryStatus(percentage: number): "healthy" | "warning" | "critical" {
+  private getMemoryStatus(
+    percentage: number,
+  ): "healthy" | "warning" | "critical" {
     if (percentage < 70) return "healthy";
     if (percentage < 85) return "warning";
     return "critical";
   }
 
-  private getDiskStatus(percentage: number): "healthy" | "warning" | "critical" {
+  private getDiskStatus(
+    percentage: number,
+  ): "healthy" | "warning" | "critical" {
     if (percentage < 80) return "healthy";
     if (percentage < 90) return "warning";
     return "critical";
+  }
+
+  private async getRealDiskUsage(): Promise<{
+    total: number;
+    free: number;
+    used: number;
+  }> {
+    try {
+      // Try to get real disk usage based on the platform
+      const platform = os.platform();
+
+      if (platform === "win32") {
+        return await this.getWindowsDiskUsage();
+      } else {
+        return await this.getUnixDiskUsage();
+      }
+    } catch (error) {
+      // Fallback to approximate calculation if commands fail
+      console.warn(
+        "Could not get real disk usage, using fallback:",
+        error.message,
+      );
+      return this.getFallbackDiskUsage();
+    }
+  }
+
+  private async getWindowsDiskUsage(): Promise<{
+    total: number;
+    free: number;
+    used: number;
+  }> {
+    try {
+      // Get disk usage for the current drive on Windows
+      const driveLetter = process.cwd().charAt(0);
+      const { stdout } = await execAsync(
+        `wmic logicaldisk where "DeviceID='${driveLetter}:'" get FreeSpace,Size /format:csv`,
+      );
+
+      const lines = stdout.split("\n").filter((line) => line.includes(","));
+      if (lines.length > 0) {
+        const parts = lines[0].split(",");
+        const free = parseInt(parts[1]) || 0;
+        const total = parseInt(parts[2]) || 0;
+        const used = total - free;
+
+        return { total, free, used };
+      }
+
+      throw new Error("Could not parse Windows disk usage");
+    } catch (error) {
+      throw new Error(`Windows disk usage failed: ${error.message}`);
+    }
+  }
+
+  private async getUnixDiskUsage(): Promise<{
+    total: number;
+    free: number;
+    used: number;
+  }> {
+    try {
+      // Use df command on Unix-like systems (Linux, macOS)
+      const { stdout } = await execAsync(`df -k "${process.cwd()}" | tail -1`);
+      const parts = stdout.trim().split(/\s+/);
+
+      if (parts.length >= 4) {
+        const total = parseInt(parts[1]) * 1024; // Convert from KB to bytes
+        const used = parseInt(parts[2]) * 1024;
+        const free = parseInt(parts[3]) * 1024;
+
+        return { total, free, used };
+      }
+
+      throw new Error("Could not parse Unix disk usage");
+    } catch (error) {
+      throw new Error(`Unix disk usage failed: ${error.message}`);
+    }
+  }
+
+  private getFallbackDiskUsage(): {
+    total: number;
+    free: number;
+    used: number;
+  } {
+    // Fallback: try to estimate based on available methods
+    try {
+      // Try to use fs.statSync to get some disk info
+      // Using fs for fallback calculation
+      fs.statSync(process.cwd());
+
+      // This is a rough estimation - in production you might want to
+      // configure these values or use a proper disk monitoring library
+      const estimatedTotal = 500 * 1024 * 1024 * 1024; // 500GB estimate
+      const estimatedFree = 200 * 1024 * 1024 * 1024; // 200GB estimate
+      const estimatedUsed = estimatedTotal - estimatedFree;
+
+      return {
+        total: estimatedTotal,
+        free: estimatedFree,
+        used: estimatedUsed,
+      };
+    } catch {
+      // Last resort: return minimal values
+      return {
+        total: 100 * 1024 * 1024 * 1024, // 100GB
+        free: 50 * 1024 * 1024 * 1024, // 50GB
+        used: 50 * 1024 * 1024 * 1024, // 50GB
+      };
+    }
   }
 
   async getOverallHealth(): Promise<{
@@ -188,16 +313,16 @@ export class HealthService {
   }> {
     const [databases, system] = await Promise.all([
       this.checkDatabases(),
-      Promise.resolve(this.getSystemHealth()),
+      this.getSystemHealth(),
     ]);
 
-    const isHealthy = 
+    const isHealthy =
       databases.postgres.status === "healthy" &&
       databases.mongodb.status === "healthy" &&
       system.memory.status !== "critical" &&
       system.disk.status !== "critical";
 
-    const isDegraded = 
+    const isDegraded =
       databases.postgres.status === "degraded" ||
       databases.mongodb.status === "degraded" ||
       system.memory.status === "warning" ||

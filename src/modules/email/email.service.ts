@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Resend } from "resend";
 
 export interface EmailTemplate {
   subject: string;
@@ -26,13 +27,27 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly fromEmail = process.env.FROM_EMAIL || "noreply@example.com";
   private readonly fromName = process.env.FROM_NAME || "API Service";
+  private readonly resend: Resend;
+
+  constructor() {
+    // Only initialize Resend if API key is provided
+    if (process.env.RESEND_API_KEY) {
+      this.resend = new Resend(process.env.RESEND_API_KEY);
+    } else {
+      // Create a mock Resend object for development/testing
+      this.resend = null as any;
+    }
+  }
 
   async sendEmail(emailData: SendEmailDto): Promise<EmailResult> {
     try {
       this.logger.log(`Sending email to: ${emailData.to}`);
-      
-      // In development, just log the email
-      if (process.env.NODE_ENV === "development") {
+
+      // In development without Resend API key, just log the email
+      if (
+        process.env.NODE_ENV === "development" &&
+        !process.env.RESEND_API_KEY
+      ) {
         this.logger.log({
           from: `${this.fromName} <${this.fromEmail}>`,
           to: emailData.to,
@@ -40,18 +55,35 @@ export class EmailService {
           text: emailData.text,
           html: emailData.html,
         });
-        
+
         return {
           success: true,
           messageId: `dev-${Date.now()}`,
         };
       }
 
-      // TODO: Implement real email service (Resend, SendGrid, etc.)
-      // For now, return success
+      // Send real email using Resend
+      if (!process.env.RESEND_API_KEY || !this.resend) {
+        throw new Error("RESEND_API_KEY is not configured");
+      }
+
+      const result = await this.resend.emails.send({
+        from: `${this.fromName} <${this.fromEmail}>`,
+        to: Array.isArray(emailData.to) ? emailData.to : [emailData.to],
+        subject: emailData.subject,
+        text: emailData.text,
+        html: emailData.html,
+      });
+
+      if (result.error) {
+        throw new Error(`Resend API error: ${result.error.message}`);
+      }
+
+      this.logger.log(`Email sent successfully with ID: ${result.data?.id}`);
+
       return {
         success: true,
-        messageId: `mock-${Date.now()}`,
+        messageId: result.data?.id,
       };
     } catch (error) {
       this.logger.error(`Failed to send email: ${error.message}`, error.stack);
@@ -71,9 +103,12 @@ export class EmailService {
     });
   }
 
-  async sendPasswordResetEmail(to: string, resetToken: string): Promise<EmailResult> {
+  async sendPasswordResetEmail(
+    to: string,
+    resetToken: string,
+  ): Promise<EmailResult> {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+
     return this.sendEmail({
       to,
       subject: "Password Reset Request",
@@ -82,9 +117,12 @@ export class EmailService {
     });
   }
 
-  async sendVerificationEmail(to: string, verificationToken: string): Promise<EmailResult> {
+  async sendVerificationEmail(
+    to: string,
+    verificationToken: string,
+  ): Promise<EmailResult> {
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
-    
+
     return this.sendEmail({
       to,
       subject: "Verify Your Email Address",
@@ -143,10 +181,33 @@ export class EmailService {
 
   async testEmailConnection(): Promise<boolean> {
     try {
-      // TODO: Implement actual email service connection test
+      if (!process.env.RESEND_API_KEY || !this.resend) {
+        this.logger.warn(
+          "RESEND_API_KEY not configured - email service unavailable",
+        );
+        return false;
+      }
+
+      // Test Resend connection by sending a test request
+      const result = await this.resend.emails.send({
+        from: `${this.fromName} <${this.fromEmail}>`,
+        to: [this.fromEmail], // Send test email to self
+        subject: "API Health Check - Email Service Test",
+        text: "This is a test email to verify email service connectivity.",
+        html: "<p>This is a test email to verify email service connectivity.</p>",
+      });
+
+      if (result.error) {
+        this.logger.error(`Email service test failed: ${result.error.message}`);
+        return false;
+      }
+
+      this.logger.log("Email service connection test successful");
       return true;
     } catch (error) {
-      this.logger.error(`Email service connection test failed: ${error.message}`);
+      this.logger.error(
+        `Email service connection test failed: ${error.message}`,
+      );
       return false;
     }
   }

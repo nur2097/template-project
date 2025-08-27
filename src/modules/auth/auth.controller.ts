@@ -30,30 +30,32 @@ export class AuthController {
 
   @Post("register")
   @ApiOperation({ summary: "Register new user" })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: "User registered successfully",
-    type: AuthResponseDto
+    type: AuthResponseDto,
   })
   @ApiResponse({ status: 400, description: "Invalid input" })
   @ApiResponse({ status: 409, description: "User already exists" })
   @ApiBody({ type: CreateUserDto })
-  async register(@Body() createUserDto: CreateUserDto): Promise<AuthResponseDto> {
-    return (this.authService as any).register(createUserDto);
+  async register(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<AuthResponseDto> {
+    return this.authService.register(createUserDto);
   }
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "User login" })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: "Login successful",
-    type: AuthResponseDto
+    type: AuthResponseDto,
   })
   @ApiResponse({ status: 401, description: "Invalid credentials" })
   @ApiBody({ type: LoginDto })
   async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
-    return (this.authService as any).login(loginDto);
+    return this.authService.login(loginDto);
   }
 
   @Post("refresh")
@@ -66,24 +68,24 @@ export class AuthController {
   @ApiBody({ type: RefreshTokenDto })
   async refreshTokens(
     @Body() refreshTokenDto: RefreshTokenDto,
-    @Request() req: any
+    @Request() req: any,
   ): Promise<AuthResponseDto> {
     const userId = req.user.sub;
-    return (this.authService as any).refreshTokens(userId, refreshTokenDto.refreshToken);
+    return this.authService.refreshTokens(userId, refreshTokenDto.refreshToken);
   }
 
   @Get("profile")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get current user profile" })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: "Profile retrieved successfully",
-    type: UserResponseDto
+    type: UserResponseDto,
   })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async getProfile(@Request() req: any): Promise<UserResponseDto> {
-    return (this.authService as any).validateUserById(req.user.sub);
+    return this.authService.validateUserById(req.user.sub);
   }
 
   @Post("logout")
@@ -94,7 +96,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: "Logout successful" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async logout(@Request() req: any): Promise<{ message: string }> {
-    await (this.authService as any).logout(req.user.sub);
+    await this.authService.logout(req.user.sub);
     return { message: "Logout successful" };
   }
 }

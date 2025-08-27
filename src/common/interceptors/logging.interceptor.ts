@@ -40,7 +40,7 @@ export class LoggingInterceptor implements NestInterceptor {
       .catch((err) => this.logger.error("Failed to log request", err.stack));
 
     return next.handle().pipe(
-      tap((_data) => {
+      tap(() => {
         const responseTime = Date.now() - startTime;
         const statusCode = res.statusCode;
 
@@ -54,7 +54,7 @@ export class LoggingInterceptor implements NestInterceptor {
             userId,
           })
           .catch((err) =>
-            this.logger.error("Failed to log response", err.stack)
+            this.logger.error("Failed to log response", err.stack),
           );
 
         // Log performance
@@ -66,7 +66,7 @@ export class LoggingInterceptor implements NestInterceptor {
             metadata: { statusCode, userId },
           })
           .catch((err) =>
-            this.logger.error("Failed to log performance", err.stack)
+            this.logger.error("Failed to log performance", err.stack),
           );
 
         // Console log for development
@@ -81,15 +81,15 @@ export class LoggingInterceptor implements NestInterceptor {
             `HTTP Error: ${method} ${url}`,
             error.stack,
             "HTTP_REQUEST",
-            userId
+            userId,
           )
           .catch((err) => this.logger.error("Failed to log error", err.stack));
 
         this.logger.error(
-          `${method} ${url} ERROR ${responseTime}ms - ${error.message}`
+          `${method} ${url} ERROR ${responseTime}ms - ${error.message}`,
         );
         throw error;
-      })
+      }),
     );
   }
 }

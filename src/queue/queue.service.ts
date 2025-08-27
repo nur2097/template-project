@@ -1,119 +1,56 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { Queue } from "bull";
+import { Injectable } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bull";
+import { Queue } from "bull";
 
 @Injectable()
 export class QueueService {
-  private readonly logger = new Logger(QueueService.name);
-
   constructor(
     @InjectQueue("email") private emailQueue: Queue,
     @InjectQueue("general") private generalQueue: Queue,
   ) {}
 
-  // Email queue operations
-  async addEmailJob(type: string, data: any, options?: any) {
-    try {
-      const job = await this.emailQueue.add(type, data, {
-        delay: options?.delay || 0,
-        attempts: options?.attempts || 3,
-        removeOnComplete: true,
-        removeOnFail: false,
-        ...options,
-      });
-      
-      this.logger.log(`Email job added: ${type} - Job ID: ${job.id}`);
-      return job;
-    } catch (error) {
-      this.logger.error(`Failed to add email job: ${type}`, error.stack);
-      throw error;
-    }
+  async addEmailJob(name: string, data: any) {
+    return await this.emailQueue.add(name, data);
   }
 
-  // General queue operations
-  async addGeneralJob(type: string, data: any, options?: any) {
-    try {
-      const job = await this.generalQueue.add(type, data, {
-        delay: options?.delay || 0,
-        attempts: options?.attempts || 3,
-        removeOnComplete: true,
-        removeOnFail: false,
-        ...options,
-      });
-      
-      this.logger.log(`General job added: ${type} - Job ID: ${job.id}`);
-      return job;
-    } catch (error) {
-      this.logger.error(`Failed to add general job: ${type}`, error.stack);
-      throw error;
-    }
+  async addGeneralJob(name: string, data: any) {
+    return await this.generalQueue.add(name, data);
   }
 
-  // Queue statistics
+  // Legacy method for backward compatibility
+  async addJob(name: string, data: any) {
+    // Route to appropriate queue based on job name
+    if (name === "send-email") {
+      return this.addEmailJob(name, data);
+    }
+    return this.addGeneralJob(name, data);
+  }
+
   async getEmailQueueStats() {
-    try {
-      const [waiting, active, completed, failed, delayed] = await Promise.all([
-        this.emailQueue.getWaiting(),
-        this.emailQueue.getActive(),
-        this.emailQueue.getCompleted(),
-        this.emailQueue.getFailed(),
-        this.emailQueue.getDelayed(),
-      ]);
+    const waiting = await this.emailQueue.getWaiting();
+    const active = await this.emailQueue.getActive();
+    const completed = await this.emailQueue.getCompleted();
+    const failed = await this.emailQueue.getFailed();
 
-      return {
-        waiting: waiting.length,
-        active: active.length,
-        completed: completed.length,
-        failed: failed.length,
-        delayed: delayed.length,
-      };
-    } catch (error) {
-      this.logger.error("Failed to get email queue stats", error.stack);
-      throw error;
-    }
+    return {
+      waiting: waiting.length,
+      active: active.length,
+      completed: completed.length,
+      failed: failed.length,
+    };
   }
 
   async getGeneralQueueStats() {
-    try {
-      const [waiting, active, completed, failed, delayed] = await Promise.all([
-        this.generalQueue.getWaiting(),
-        this.generalQueue.getActive(),
-        this.generalQueue.getCompleted(),
-        this.generalQueue.getFailed(),
-        this.generalQueue.getDelayed(),
-      ]);
+    const waiting = await this.generalQueue.getWaiting();
+    const active = await this.generalQueue.getActive();
+    const completed = await this.generalQueue.getCompleted();
+    const failed = await this.generalQueue.getFailed();
 
-      return {
-        waiting: waiting.length,
-        active: active.length,
-        completed: completed.length,
-        failed: failed.length,
-        delayed: delayed.length,
-      };
-    } catch (error) {
-      this.logger.error("Failed to get general queue stats", error.stack);
-      throw error;
-    }
-  }
-
-  // Clean up completed jobs
-  async cleanEmailQueue() {
-    try {
-      await this.emailQueue.clean(24 * 60 * 60 * 1000, "completed"); // 24 hours
-      await this.emailQueue.clean(48 * 60 * 60 * 1000, "failed"); // 48 hours
-      this.logger.log("Email queue cleaned successfully");
-    } catch (error) {
-      this.logger.error("Failed to clean email queue", error.stack);
-    }
-  }
-
-  async cleanGeneralQueue() {
-    try {
-      await this.generalQueue.clean(24 * 60 * 60 * 1000, "completed"); // 24 hours
-      await this.generalQueue.clean(48 * 60 * 60 * 1000, "failed"); // 48 hours
-      this.logger.log("General queue cleaned successfully");
-    } catch (error) {
-      this.logger.error("Failed to clean general queue", error.stack);
-    }
+    return {
+      waiting: waiting.length,
+      active: active.length,
+      completed: completed.length,
+      failed: failed.length,
+    };
   }
 }

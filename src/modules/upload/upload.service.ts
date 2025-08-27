@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
@@ -30,10 +30,11 @@ export interface UploadedFile {
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
   private readonly uploadDir = process.env.UPLOAD_DIR || "./uploads";
-  private readonly maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5MB
+  private readonly maxFileSize =
+    parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5MB
   private readonly allowedMimeTypes = [
     "image/jpeg",
-    "image/jpg", 
+    "image/jpg",
     "image/png",
     "image/gif",
     "image/webp",
@@ -43,7 +44,10 @@ export class UploadService {
     "application/json",
   ];
 
-  async uploadFile(file: UploadedFile, folder = "general"): Promise<FileUploadResult> {
+  async uploadFile(
+    file: UploadedFile,
+    folder = "general",
+  ): Promise<FileUploadResult> {
     try {
       // Validate file
       const validation = this.validateFile(file);
@@ -87,15 +91,21 @@ export class UploadService {
     }
   }
 
-  async uploadMultipleFiles(files: UploadedFile[], folder = "general"): Promise<FileUploadResult[]> {
+  async uploadMultipleFiles(
+    files: UploadedFile[],
+    folder = "general",
+  ): Promise<FileUploadResult[]> {
     const results = await Promise.all(
-      files.map(file => this.uploadFile(file, folder))
+      files.map((file) => this.uploadFile(file, folder)),
     );
-    
+
     return results;
   }
 
-  async uploadAvatar(file: UploadedFile, userId: string): Promise<FileUploadResult> {
+  async uploadAvatar(
+    file: UploadedFile,
+    userId: string,
+  ): Promise<FileUploadResult> {
     // Additional validation for avatar images
     if (!file.mimetype.startsWith("image/")) {
       return {
@@ -158,14 +168,18 @@ export class UploadService {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2);
     const extension = path.extname(originalName);
-    const baseName = path.basename(originalName, extension)
+    const baseName = path
+      .basename(originalName, extension)
       .replace(/[^a-zA-Z0-9]/g, "_")
       .substring(0, 50);
-    
+
     return `${timestamp}_${random}_${baseName}${extension}`;
   }
 
-  getFileInfo(filename: string, folder = "general"): {
+  getFileInfo(
+    filename: string,
+    folder = "general",
+  ): {
     exists: boolean;
     path?: string;
     url?: string;

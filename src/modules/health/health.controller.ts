@@ -13,9 +13,12 @@ export class HealthController {
   @ApiResponse({ status: 503, description: "Service is unhealthy" })
   async check() {
     const health = await this.healthService.getOverallHealth();
-    
+
     if (health.status === "unhealthy") {
-      throw new HttpException("Service Unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException(
+        "Service Unavailable",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
 
     return {
@@ -33,7 +36,7 @@ export class HealthController {
   @ApiResponse({ status: 503, description: "Service is unhealthy" })
   async detailedCheck() {
     const health = await this.healthService.getOverallHealth();
-    
+
     if (health.status === "unhealthy") {
       throw new HttpException(health, HttpStatus.SERVICE_UNAVAILABLE);
     }
@@ -44,18 +47,26 @@ export class HealthController {
   @Get("database")
   @ApiOperation({ summary: "Database health check" })
   @ApiResponse({ status: 200, description: "Database connections are healthy" })
-  @ApiResponse({ status: 503, description: "Database connections are unhealthy" })
+  @ApiResponse({
+    status: 503,
+    description: "Database connections are unhealthy",
+  })
   async databaseCheck() {
     const databases = await this.healthService.checkDatabases();
-    
-    const isHealthy = databases.postgres.status === "healthy" && databases.mongodb.status === "healthy";
-    
+
+    const isHealthy =
+      databases.postgres.status === "healthy" &&
+      databases.mongodb.status === "healthy";
+
     if (!isHealthy) {
-      throw new HttpException({
-        status: "unhealthy",
-        databases,
-        timestamp: new Date().toISOString(),
-      }, HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException(
+        {
+          status: "unhealthy",
+          databases,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
 
     return {
@@ -70,16 +81,20 @@ export class HealthController {
   @ApiResponse({ status: 200, description: "System resources are healthy" })
   @ApiResponse({ status: 503, description: "System resources are unhealthy" })
   async systemCheck() {
-    const system = this.healthService.getSystemHealth();
-    
-    const isHealthy = system.memory.status !== "critical" && system.disk.status !== "critical";
-    
+    const system = await this.healthService.getSystemHealth();
+
+    const isHealthy =
+      system.memory.status !== "critical" && system.disk.status !== "critical";
+
     if (!isHealthy) {
-      throw new HttpException({
-        status: "unhealthy",
-        system,
-        timestamp: new Date().toISOString(),
-      }, HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException(
+        {
+          status: "unhealthy",
+          system,
+          timestamp: new Date().toISOString(),
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
 
     return {
@@ -91,15 +106,23 @@ export class HealthController {
 
   @Get("readiness")
   @ApiOperation({ summary: "Kubernetes readiness probe" })
-  @ApiResponse({ status: 200, description: "Service is ready to accept traffic" })
+  @ApiResponse({
+    status: 200,
+    description: "Service is ready to accept traffic",
+  })
   @ApiResponse({ status: 503, description: "Service is not ready" })
   async readiness() {
     const databases = await this.healthService.checkDatabases();
-    
-    const isReady = databases.postgres.status === "healthy" && databases.mongodb.status === "healthy";
-    
+
+    const isReady =
+      databases.postgres.status === "healthy" &&
+      databases.mongodb.status === "healthy";
+
     if (!isReady) {
-      throw new HttpException("Service not ready", HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException(
+        "Service not ready",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
 
     return {
@@ -122,9 +145,9 @@ export class HealthController {
   @Get("metrics")
   @ApiOperation({ summary: "Application metrics" })
   @ApiResponse({ status: 200, description: "Application metrics" })
-  metrics() {
-    const system = this.healthService.getSystemHealth();
-    
+  async metrics() {
+    const system = await this.healthService.getSystemHealth();
+
     return {
       timestamp: new Date().toISOString(),
       uptime: system.uptime,

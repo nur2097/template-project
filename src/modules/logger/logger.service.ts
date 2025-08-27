@@ -58,7 +58,7 @@ export class LoggerService {
     message: string,
     stack?: string,
     context?: string,
-    userId?: string
+    userId?: string,
   ) {
     const collection = this.connection.db.collection("error_logs");
     await collection.insertOne({
@@ -115,6 +115,22 @@ export class LoggerService {
   // Legacy method for backward compatibility
   async log(message: string, context?: string) {
     await this.logInfo(message, context);
+  }
+
+  // Cleanup method for queue processor
+  async cleanupOldLogs(
+    collectionName: string,
+    cutoffDate: Date,
+  ): Promise<{ deletedCount: number }> {
+    try {
+      const collection = this.connection.db.collection(collectionName);
+      const result = await collection.deleteMany({
+        timestamp: { $lt: cutoffDate },
+      });
+      return { deletedCount: result.deletedCount || 0 };
+    } catch (error) {
+      throw new Error(`Failed to cleanup ${collectionName}: ${error.message}`);
+    }
   }
 
   // Get logs methods

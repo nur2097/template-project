@@ -28,7 +28,7 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-    })
+    }),
   );
 
   // Global filters & interceptors will be handled through APP_FILTER and APP_INTERCEPTOR providers
@@ -40,7 +40,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle("NestJS Enterprise API")
       .setDescription(
-        "Enterprise-ready NestJS template with comprehensive logging, monitoring, and security features"
+        "Enterprise-ready NestJS template with comprehensive logging, monitoring, and security features",
       )
       .setVersion("1.0.0")
       .addBearerAuth()

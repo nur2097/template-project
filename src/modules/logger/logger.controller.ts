@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Param } from "@nestjs/common";
+import { Controller, Get, Post, Body, Query } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
@@ -121,13 +121,13 @@ export class LoggerController {
         totalErrors: errorStats.reduce((sum, stat) => sum + stat.count, 0),
         totalOperations: performanceStats.reduce(
           (sum, stat) => sum + stat.count,
-          0
+          0,
         ),
         averageResponseTime:
           performanceStats.length > 0
             ? performanceStats.reduce(
                 (sum, stat) => sum + stat.avgDuration,
-                0
+                0,
               ) / performanceStats.length
             : 0,
         slowestOperation: performanceStats[0]?.avgDuration || 0,
@@ -148,7 +148,7 @@ export class LoggerController {
         await this.loggerService.logError(
           message,
           "Test stack trace",
-          "TEST_CONTROLLER"
+          "TEST_CONTROLLER",
         );
         break;
       case "debug":

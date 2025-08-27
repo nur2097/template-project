@@ -12,7 +12,7 @@ import { ThrottlerGuard } from "@nestjs/throttler";
         limit: 3, // 3 requests per second
       },
       {
-        name: "medium", 
+        name: "medium",
         ttl: 10000, // 10 seconds
         limit: 20, // 20 requests per 10 seconds
       },
