@@ -1,10 +1,11 @@
 import { Module } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { UsersController } from "./users.controller";
-import { postgresProviders } from "../../shared/database/postgres.provider";
+import { DatabaseModule } from "../../shared/database/database.module";
 
 @Module({
-  providers: [UsersService, ...postgresProviders],
+  imports: [DatabaseModule],
+  providers: [UsersService],
   controllers: [UsersController],
   exports: [UsersService],
 })

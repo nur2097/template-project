@@ -81,27 +81,39 @@ export class HealthController {
   @ApiResponse({ status: 200, description: "System resources are healthy" })
   @ApiResponse({ status: 503, description: "System resources are unhealthy" })
   async systemCheck() {
-    const system = await this.healthService.getSystemHealth();
+    try {
+      const system = await this.healthService.getSystemHealth();
 
-    const isHealthy =
-      system.memory.status !== "critical" && system.disk.status !== "critical";
+      const isHealthy =
+        system.memory.status !== "critical" && system.disk.status !== "critical";
 
-    if (!isHealthy) {
+      if (!isHealthy) {
+        throw new HttpException(
+          {
+            status: "unhealthy",
+            system,
+            timestamp: new Date().toISOString(),
+          },
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+
+      return {
+        status: "healthy",
+        system,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
       throw new HttpException(
         {
-          status: "unhealthy",
-          system,
+          status: "error",
+          message: "System health check failed",
+          error: error.message,
           timestamp: new Date().toISOString(),
         },
-        HttpStatus.SERVICE_UNAVAILABLE,
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    return {
-      status: "healthy",
-      system,
-      timestamp: new Date().toISOString(),
-    };
   }
 
   @Get("readiness")

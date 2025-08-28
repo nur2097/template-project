@@ -12,8 +12,10 @@ import { SecurityModule } from "./modules/security/security.module";
 import { RedisCacheModule } from "./cache/cache.module";
 import { QueueModule } from "./queue/queue.module";
 import { DatabaseModule } from "./shared/database/database.module";
+import { TracingModule } from "./common/tracing/tracing.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import { TracingInterceptor } from "./common/interceptors/tracing.interceptor";
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
         },
       }),
     }),
+    TracingModule,
     SecurityModule,
     DatabaseModule,
     AuthModule,
@@ -47,6 +50,10 @@ import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TracingInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

@@ -1,33 +1,29 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { UsersService } from "./users.service";
-import { DataSource } from "typeorm";
+import { PrismaService } from "../../shared/database/prisma.service";
 
 describe("UsersService", () => {
   let service: UsersService;
-  let mockDataSource: Partial<DataSource>;
-  let mockRepository: any;
+  let mockPrismaService: Partial<PrismaService>;
 
   beforeEach(async () => {
-    mockRepository = {
-      findOne: jest.fn(),
-      create: jest.fn(),
-      save: jest.fn(),
-      findAndCount: jest.fn(),
-      update: jest.fn(),
-      softDelete: jest.fn(),
-      count: jest.fn(),
-    };
-
-    mockDataSource = {
-      getRepository: jest.fn().mockReturnValue(mockRepository),
+    mockPrismaService = {
+      user: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+        count: jest.fn(),
+      } as any,
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         {
-          provide: "POSTGRES_DATA_SOURCE",
-          useValue: mockDataSource,
+          provide: PrismaService,
+          useValue: mockPrismaService,
         },
       ],
     }).compile();
@@ -42,18 +38,22 @@ describe("UsersService", () => {
   describe("findByEmail", () => {
     it("should return user by email", async () => {
       const mockUser = { id: 1, email: "test@example.com" };
-      mockRepository.findOne.mockResolvedValue(mockUser);
+      (mockPrismaService.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
 
       const result = await service.findByEmail("test@example.com");
 
       expect(result).toEqual(mockUser);
-      expect(mockRepository.findOne).toHaveBeenCalledWith({
-        where: { email: "test@example.com", status: "active" },
+      expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith({
+        where: { 
+          email: "test@example.com",
+          status: "ACTIVE",
+          deletedAt: null,
+        },
       });
     });
 
     it("should return null if user not found", async () => {
-      mockRepository.findOne.mockResolvedValue(null);
+      (mockPrismaService.user.findFirst as jest.Mock).mockResolvedValue(null);
 
       const result = await service.findByEmail("nonexistent@example.com");
 
@@ -63,7 +63,7 @@ describe("UsersService", () => {
 
   describe("getUserStats", () => {
     it("should return user statistics", async () => {
-      mockRepository.count
+      (mockPrismaService.user.count as jest.Mock)
         .mockResolvedValueOnce(100) // total
         .mockResolvedValueOnce(80) // active
         .mockResolvedValueOnce(15) // inactive

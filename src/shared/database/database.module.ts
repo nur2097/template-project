@@ -1,23 +1,9 @@
-import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
-import { ConfigModule, ConfigService } from "@nestjs/config";
+import { Module, Global } from "@nestjs/common";
+import { PrismaService } from "./prisma.service";
 
+@Global()
 @Module({
-  imports: [
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: "postgres",
-        host: config.get("POSTGRES_HOST"),
-        port: +config.get("POSTGRES_PORT"),
-        username: config.get("POSTGRES_USER"),
-        password: config.get("POSTGRES_PASSWORD"),
-        database: config.get("POSTGRES_DB"),
-        synchronize: true, // dev ortamında true, prod’da false
-        autoLoadEntities: true,
-      }),
-    }),
-  ],
+  providers: [PrismaService],
+  exports: [PrismaService],
 })
 export class DatabaseModule {}

@@ -1,16 +1,15 @@
 import {
   Injectable,
-  Inject,
   NotFoundException,
   ConflictException,
+  Logger,
 } from "@nestjs/common";
-import { DataSource, Repository } from "typeorm";
+import { User, UserStatus, UserRole } from "@prisma/client";
 import * as bcrypt from "bcrypt";
-import { User, UserStatus } from "./entities/user.entity";
+import { PrismaService } from "../../shared/database/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserResponseDto } from "./dto/user-response.dto";
-import { plainToClass } from "class-transformer";
 
 export interface IUsersService {
   create(createUserDto: CreateUserDto): Promise<UserResponseDto>;
@@ -42,14 +41,12 @@ export interface IUsersService {
 
 @Injectable()
 export class UsersService implements IUsersService {
-  private userRepository: Repository<User>;
+  private readonly logger = new Logger(UsersService.name);
 
-  constructor(@Inject("POSTGRES_DATA_SOURCE") private dataSource: DataSource) {
-    this.userRepository = this.dataSource.getRepository(User);
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    const existingUser = await this.userRepository.findOne({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
     });
 
@@ -59,15 +56,16 @@ export class UsersService implements IUsersService {
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    const user = this.userRepository.create({
-      ...createUserDto,
-      password: hashedPassword,
+    const user = await this.prisma.user.create({
+      data: {
+        ...createUserDto,
+        password: hashedPassword,
+      },
     });
 
-    const savedUser = await this.userRepository.save(user);
-    return plainToClass(UserResponseDto, savedUser, {
-      excludeExtraneousValues: true,
-    });
+    // Convert to response DTO (exclude sensitive fields)
+    const { password, refreshToken, ...userResponse } = user;
+    return userResponse as UserResponseDto;
   }
 
   async findAll(
@@ -82,19 +80,41 @@ export class UsersService implements IUsersService {
       totalPages: number;
     };
   }> {
-    const [users, total] = await this.userRepository.findAndCount({
-      where: { status: UserStatus.ACTIVE },
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { createdAt: "DESC" },
-    });
-
-    const data = users.map((user) =>
-      plainToClass(UserResponseDto, user, { excludeExtraneousValues: true }),
-    );
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { 
+          status: UserStatus.ACTIVE,
+          deletedAt: null,
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          status: true,
+          avatar: true,
+          phoneNumber: true,
+          emailVerified: true,
+          emailVerifiedAt: true,
+          lastLoginAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.user.count({
+        where: { 
+          status: UserStatus.ACTIVE,
+          deletedAt: null,
+        },
+      }),
+    ]);
 
     return {
-      data,
+      data: users as UserResponseDto[],
       meta: {
         total,
         page,
@@ -105,22 +125,43 @@ export class UsersService implements IUsersService {
   }
 
   async findOne(id: number): Promise<UserResponseDto> {
-    const user = await this.userRepository.findOne({
-      where: { id, status: UserStatus.ACTIVE },
+    const user = await this.prisma.user.findFirst({
+      where: { 
+        id, 
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        avatar: true,
+        phoneNumber: true,
+        emailVerified: true,
+        emailVerifiedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
-    return plainToClass(UserResponseDto, user, {
-      excludeExtraneousValues: true,
-    });
+    return user as UserResponseDto;
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({
-      where: { email, status: UserStatus.ACTIVE },
+    return this.prisma.user.findFirst({
+      where: { 
+        email, 
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
     });
   }
 
@@ -128,8 +169,12 @@ export class UsersService implements IUsersService {
     id: number,
     updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
-    const user = await this.userRepository.findOne({
-      where: { id, status: UserStatus.ACTIVE },
+    const user = await this.prisma.user.findFirst({
+      where: { 
+        id, 
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
     });
 
     if (!user) {
@@ -137,37 +182,61 @@ export class UsersService implements IUsersService {
     }
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.userRepository.findOne({
+      const existingUser = await this.prisma.user.findUnique({
         where: { email: updateUserDto.email },
       });
 
-      if (existingUser) {
+      if (existingUser && existingUser.id !== id) {
         throw new ConflictException("User with this email already exists");
       }
     }
 
+    const updateData: any = { ...updateUserDto };
     if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+      updateData.password = await bcrypt.hash(updateUserDto.password, 10);
     }
 
-    await this.userRepository.update(id, updateUserDto);
-    const updatedUser = await this.userRepository.findOne({ where: { id } });
-
-    return plainToClass(UserResponseDto, updatedUser, {
-      excludeExtraneousValues: true,
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        avatar: true,
+        phoneNumber: true,
+        emailVerified: true,
+        emailVerifiedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
+
+    return updatedUser as UserResponseDto;
   }
 
   async remove(id: number): Promise<void> {
-    const user = await this.userRepository.findOne({
-      where: { id, status: UserStatus.ACTIVE },
+    const user = await this.prisma.user.findFirst({
+      where: { 
+        id, 
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
     });
 
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
-    await this.userRepository.softDelete(id);
+    // Soft delete
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   async updateRefreshToken(
@@ -177,25 +246,36 @@ export class UsersService implements IUsersService {
     const hashedRefreshToken = refreshToken
       ? await bcrypt.hash(refreshToken, 10)
       : null;
-    await this.userRepository.update(userId, {
-      refreshToken: hashedRefreshToken,
+    
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: hashedRefreshToken },
     });
   }
 
   async updateLastLogin(userId: number): Promise<void> {
-    await this.userRepository.update(userId, { lastLoginAt: new Date() });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    });
   }
 
   async verifyEmail(userId: number): Promise<void> {
-    await this.userRepository.update(userId, {
-      emailVerified: true,
-      emailVerifiedAt: new Date(),
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+      },
     });
   }
 
   async changePassword(userId: number, newPassword: string): Promise<void> {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.userRepository.update(userId, { password: hashedPassword });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
   }
 
   async getUserStats(): Promise<{
@@ -205,10 +285,25 @@ export class UsersService implements IUsersService {
     suspended: number;
   }> {
     const [total, active, inactive, suspended] = await Promise.all([
-      this.userRepository.count(),
-      this.userRepository.count({ where: { status: UserStatus.ACTIVE } }),
-      this.userRepository.count({ where: { status: UserStatus.INACTIVE } }),
-      this.userRepository.count({ where: { status: UserStatus.SUSPENDED } }),
+      this.prisma.user.count({ where: { deletedAt: null } }),
+      this.prisma.user.count({ 
+        where: { 
+          status: UserStatus.ACTIVE,
+          deletedAt: null,
+        },
+      }),
+      this.prisma.user.count({ 
+        where: { 
+          status: UserStatus.INACTIVE,
+          deletedAt: null,
+        },
+      }),
+      this.prisma.user.count({ 
+        where: { 
+          status: UserStatus.SUSPENDED,
+          deletedAt: null,
+        },
+      }),
     ]);
 
     return { total, active, inactive, suspended };

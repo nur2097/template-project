@@ -1,5 +1,5 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../../shared/database/prisma.service";
 import { Connection as MongoConnection } from "mongoose";
 import { InjectConnection } from "@nestjs/mongoose";
 import * as fs from "fs";
@@ -49,8 +49,10 @@ export interface SystemHealth {
 
 @Injectable()
 export class HealthService {
+  private readonly logger = new Logger(HealthService.name);
+  
   constructor(
-    @Inject("POSTGRES_DATA_SOURCE") private postgresDataSource: DataSource,
+    private readonly prismaService: PrismaService,
     @InjectConnection() private mongoConnection: MongoConnection,
   ) {}
 
@@ -86,21 +88,21 @@ export class HealthService {
 
   private async checkPostgreSQL(): Promise<HealthStatus> {
     try {
-      if (!this.postgresDataSource.isInitialized) {
+      const isHealthy = await this.prismaService.isHealthy();
+      if (!isHealthy) {
         return {
           status: "unhealthy",
-          message: "PostgreSQL connection not initialized",
+          message: "PostgreSQL connection failed",
         };
       }
 
-      const result = await this.postgresDataSource.query("SELECT NOW()");
+      const result = await this.prismaService.$queryRaw`SELECT NOW() as now`;
       return {
         status: "healthy",
         details: {
           connected: true,
           timestamp: result[0].now,
-          database: this.postgresDataSource.options.database,
-          host: (this.postgresDataSource.options as any).host,
+          database: "postgresql",
         },
       };
     } catch (error) {
@@ -210,7 +212,7 @@ export class HealthService {
         return await this.getUnixDiskUsage();
       }
     } catch (error) {
-      // Fallback to approximate calculation if commands fail
+      // Fallback to environment variables if commands fail
       console.warn(
         "Could not get real disk usage, using fallback:",
         error.message,
@@ -253,20 +255,58 @@ export class HealthService {
     used: number;
   }> {
     try {
-      // Use df command on Unix-like systems (Linux, macOS)
-      const { stdout } = await execAsync(`df -k "${process.cwd()}" | tail -1`);
-      const parts = stdout.trim().split(/\s+/);
+      // Use df command with proper escaping for macOS/Linux
+      const currentDir = process.cwd().replace(/"/g, '\\"');
+      const { stdout } = await execAsync(`df -k "${currentDir}"`);
+      
+      // Split lines and get the data line (skip header)
+      const lines = stdout.trim().split('\n');
+      let dataLine = lines[lines.length - 1]; // Last line contains the data
+      
+      // Handle case where filesystem name is on separate line (common on macOS)
+      if (lines.length > 2 && !lines[1].includes('/')) {
+        dataLine = lines[lines.length - 1];
+      }
+      
+      const parts = dataLine.trim().split(/\s+/);
 
-      if (parts.length >= 4) {
-        const total = parseInt(parts[1]) * 1024; // Convert from KB to bytes
-        const used = parseInt(parts[2]) * 1024;
-        const free = parseInt(parts[3]) * 1024;
-
-        return { total, free, used };
+      // Try different parsing strategies based on number of parts
+      let total, used, free;
+      
+      if (parts.length >= 9) {
+        // macOS format: /dev/disk3s5 239362496 56982928 163230060 26% 968828 1632300600 0% /System/Volumes/Data
+        total = parseInt(parts[1]) * 1024; // 1K-blocks  
+        used = parseInt(parts[2]) * 1024;  // Used
+        free = parseInt(parts[3]) * 1024;  // Available
+      } else if (parts.length >= 6) {
+        // Standard Linux format: Filesystem 1K-blocks Used Available Use% Mounted
+        total = parseInt(parts[1]) * 1024;
+        used = parseInt(parts[2]) * 1024;
+        free = parseInt(parts[3]) * 1024;
+      } else if (parts.length >= 4) {
+        // Simplified format: blocks Used Available Use%
+        total = parseInt(parts[0]) * 1024;
+        used = parseInt(parts[1]) * 1024;
+        free = parseInt(parts[2]) * 1024;
+      } else {
+        // Try to find numeric values in the line
+        const numbers = dataLine.match(/\d+/g);
+        if (numbers && numbers.length >= 3) {
+          total = parseInt(numbers[0]) * 1024;
+          used = parseInt(numbers[1]) * 1024;  
+          free = parseInt(numbers[2]) * 1024;
+        } else {
+          throw new Error(`Could not extract numeric values from: ${dataLine}`);
+        }
       }
 
-      throw new Error("Could not parse Unix disk usage");
+      if (!total || total <= 0) {
+        throw new Error(`Invalid disk values: total=${total}, used=${used}, free=${free}`);
+      }
+
+      return { total, free, used };
     } catch (error) {
+      console.warn('Unix disk usage command failed:', error.message);
       throw new Error(`Unix disk usage failed: ${error.message}`);
     }
   }
@@ -276,29 +316,25 @@ export class HealthService {
     free: number;
     used: number;
   } {
-    // Fallback: try to estimate based on available methods
     try {
-      // Try to use fs.statSync to get some disk info
-      // Using fs for fallback calculation
-      fs.statSync(process.cwd());
-
-      // This is a rough estimation - in production you might want to
-      // configure these values or use a proper disk monitoring library
-      const estimatedTotal = 500 * 1024 * 1024 * 1024; // 500GB estimate
-      const estimatedFree = 200 * 1024 * 1024 * 1024; // 200GB estimate
-      const estimatedUsed = estimatedTotal - estimatedFree;
-
-      return {
-        total: estimatedTotal,
-        free: estimatedFree,
-        used: estimatedUsed,
-      };
+      // Try to get actual filesystem stats
+      const stats = fs.statSync(process.cwd());
+      
+      // If we can't get real disk usage, throw to use environment variables
+      throw new Error("Cannot determine real disk usage");
     } catch {
-      // Last resort: return minimal values
+      // Use environment variables with sensible defaults
+      const totalGB = parseInt(process.env.FALLBACK_DISK_TOTAL_GB || "100");
+      const freeGB = parseInt(process.env.FALLBACK_DISK_FREE_GB || "50");
+      
+      const total = totalGB * 1024 * 1024 * 1024;
+      const free = freeGB * 1024 * 1024 * 1024;
+      const used = total - free;
+
       return {
-        total: 100 * 1024 * 1024 * 1024, // 100GB
-        free: 50 * 1024 * 1024 * 1024, // 50GB
-        used: 50 * 1024 * 1024 * 1024, // 50GB
+        total,
+        free,
+        used,
       };
     }
   }

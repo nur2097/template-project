@@ -1,0 +1,149 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id               Int         @id @default(autoincrement())
+  email            String      @unique
+  firstName        String      @map("first_name")
+  lastName         String      @map("last_name")
+  password         String
+  role             UserRole    @default(USER)
+  status           UserStatus  @default(ACTIVE)
+  avatar           String?
+  phoneNumber      String?     @map("phone_number")
+  emailVerified    Boolean     @default(false) @map("email_verified")
+  emailVerifiedAt  DateTime?   @map("email_verified_at")
+  lastLoginAt      DateTime?   @map("last_login_at")
+  refreshToken     String?     @map("refresh_token")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  deletedAt        DateTime?   @map("deleted_at")
+
+  // Relations
+  apiKeys      ApiKey[]      @relation("UserApiKeys")
+  sessions     UserSession[] @relation("UserSessions")
+
+  @@map("users")
+}
+
+// Performance Logs Model for Analytics
+model PerformanceLog {
+  id          Int      @id @default(autoincrement())
+  operation   String
+  duration    Int      // milliseconds
+  method      String?
+  url         String?
+  statusCode  Int?
+  userId      Int?
+  userAgent   String?
+  ip          String?
+  timestamp   DateTime @default(now())
+  metadata    Json?
+
+  @@map("performance_logs")
+}
+
+// Request Logs Model
+model RequestLog {
+  id          Int      @id @default(autoincrement())
+  method      String
+  url         String
+  headers     Json?
+  body        Json?
+  userAgent   String?  @map("user_agent")
+  ip          String?
+  userId      Int?     @map("user_id")
+  timestamp   DateTime @default(now())
+
+  @@map("request_logs")
+}
+
+// Response Logs Model  
+model ResponseLog {
+  id           Int      @id @default(autoincrement())
+  method       String
+  url          String
+  statusCode   Int      @map("status_code")
+  responseTime Int      @map("response_time") // milliseconds
+  userId       Int?     @map("user_id")
+  timestamp    DateTime @default(now())
+
+  @@map("response_logs")
+}
+
+// Error Logs Model
+model ErrorLog {
+  id        Int      @id @default(autoincrement())
+  message   String
+  stack     String?
+  context   String?
+  userId    Int?     @map("user_id")
+  level     String   @default("error")
+  timestamp DateTime @default(now())
+  metadata  Json?
+
+  @@map("error_logs")
+}
+
+// API Keys/Tokens Model
+model ApiKey {
+  id          Int       @id @default(autoincrement())
+  name        String
+  key         String    @unique
+  userId      Int       @map("user_id")
+  permissions Json?
+  expiresAt   DateTime? @map("expires_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user User @relation("UserApiKeys", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+// User Sessions Model
+model UserSession {
+  id          String   @id @default(cuid())
+  userId      Int      @map("user_id")
+  sessionData Json     @map("session_data")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+// Rate Limiting Model
+model RateLimit {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  points    Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+
+  @@map("rate_limits")
+}
