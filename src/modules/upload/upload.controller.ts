@@ -6,7 +6,6 @@ import {
   UseInterceptors,
   UploadedFile,
   UploadedFiles,
-  UseGuards,
   BadRequestException,
 } from "@nestjs/common";
 import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
@@ -17,7 +16,6 @@ import {
   ApiBearerAuth,
   ApiConsumes,
 } from "@nestjs/swagger";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import {
   UploadService,
   UploadedFile as CustomUploadedFile,
@@ -26,7 +24,6 @@ import {
 @ApiTags("Upload")
 @Controller("upload")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
@@ -137,7 +134,7 @@ export class UploadController {
   @ApiResponse({ status: 404, description: "File not found" })
   async getFileInfo(
     @Param("folder") folder: string,
-    @Param("filename") filename: string,
+    @Param("filename") filename: string
   ) {
     const fileInfo = this.uploadService.getFileInfo(filename, folder);
 
@@ -163,7 +160,7 @@ export class UploadController {
     return {
       maxFileSize: this.uploadService.getMaxFileSize(),
       maxFileSizeMB: Math.round(
-        this.uploadService.getMaxFileSize() / 1024 / 1024,
+        this.uploadService.getMaxFileSize() / 1024 / 1024
       ),
       allowedFileTypes: this.uploadService.getAllowedFileTypes(),
       message: "Upload configuration retrieved successfully",

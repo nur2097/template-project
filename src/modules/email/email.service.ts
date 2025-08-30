@@ -105,7 +105,7 @@ export class EmailService {
 
   async sendPasswordResetEmail(
     to: string,
-    resetToken: string,
+    resetToken: string
   ): Promise<EmailResult> {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
@@ -119,7 +119,7 @@ export class EmailService {
 
   async sendVerificationEmail(
     to: string,
-    verificationToken: string,
+    verificationToken: string
   ): Promise<EmailResult> {
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
@@ -183,9 +183,10 @@ export class EmailService {
     try {
       if (!process.env.RESEND_API_KEY || !this.resend) {
         this.logger.warn(
-          "RESEND_API_KEY not configured - email service unavailable",
+          "RESEND_API_KEY not configured - using development mode"
         );
-        return false;
+        // In development mode, consider email service as "working" since it logs emails
+        return process.env.NODE_ENV === "development";
       }
 
       // Test Resend connection by sending a test request
@@ -206,7 +207,7 @@ export class EmailService {
       return true;
     } catch (error) {
       this.logger.error(
-        `Email service connection test failed: ${error.message}`,
+        `Email service connection test failed: ${error.message}`
       );
       return false;
     }

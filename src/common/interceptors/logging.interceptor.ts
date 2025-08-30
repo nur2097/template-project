@@ -6,7 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { Observable, tap, catchError } from "rxjs";
-import { LoggerService } from "../../modules/logger/logger.service";
+import { LoggerService } from "../logger/logger.service";
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -21,7 +21,7 @@ export class LoggingInterceptor implements NestInterceptor {
     const method = req.method;
     const url = req.url;
     const userAgent = req.get("User-Agent") || "";
-    const ip = req.ip || req.connection.remoteAddress;
+    const ip = req.ip || req.socket.remoteAddress;
     const userId = req.user?.userId;
 
     const startTime = Date.now();
@@ -54,7 +54,7 @@ export class LoggingInterceptor implements NestInterceptor {
             userId,
           })
           .catch((err) =>
-            this.logger.error("Failed to log response", err.stack),
+            this.logger.error("Failed to log response", err.stack)
           );
 
         // Log performance
@@ -62,11 +62,10 @@ export class LoggingInterceptor implements NestInterceptor {
           .logPerformance({
             operation: `${method} ${url}`,
             duration: responseTime,
-            context: "HTTP_REQUEST",
-            metadata: { statusCode, userId },
+            metadata: { context: "HTTP_REQUEST", statusCode, userId },
           })
           .catch((err) =>
-            this.logger.error("Failed to log performance", err.stack),
+            this.logger.error("Failed to log performance", err.stack)
           );
 
         // Console log for development
@@ -81,15 +80,15 @@ export class LoggingInterceptor implements NestInterceptor {
             `HTTP Error: ${method} ${url}`,
             error.stack,
             "HTTP_REQUEST",
-            userId,
+            userId
           )
           .catch((err) => this.logger.error("Failed to log error", err.stack));
 
         this.logger.error(
-          `${method} ${url} ERROR ${responseTime}ms - ${error.message}`,
+          `${method} ${url} ERROR ${responseTime}ms - ${error.message}`
         );
         throw error;
-      }),
+      })
     );
   }
 }

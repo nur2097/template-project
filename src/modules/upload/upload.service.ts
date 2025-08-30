@@ -46,7 +46,7 @@ export class UploadService {
 
   async uploadFile(
     file: UploadedFile,
-    folder = "general",
+    folder = "general"
   ): Promise<FileUploadResult> {
     try {
       // Validate file
@@ -93,10 +93,10 @@ export class UploadService {
 
   async uploadMultipleFiles(
     files: UploadedFile[],
-    folder = "general",
+    folder = "general"
   ): Promise<FileUploadResult[]> {
     const results = await Promise.all(
-      files.map((file) => this.uploadFile(file, folder)),
+      files.map((file) => this.uploadFile(file, folder))
     );
 
     return results;
@@ -104,7 +104,7 @@ export class UploadService {
 
   async uploadAvatar(
     file: UploadedFile,
-    userId: string,
+    userId: string
   ): Promise<FileUploadResult> {
     // Additional validation for avatar images
     if (!file.mimetype.startsWith("image/")) {
@@ -178,7 +178,7 @@ export class UploadService {
 
   getFileInfo(
     filename: string,
-    folder = "general",
+    folder = "general"
   ): {
     exists: boolean;
     path?: string;

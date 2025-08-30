@@ -1,170 +1,173 @@
-import { Controller, Get, HttpStatus, HttpException } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { Controller, Get } from "@nestjs/common";
+import {
+  HealthCheckService,
+  HealthCheck,
+  MemoryHealthIndicator,
+  DiskHealthIndicator,
+} from "@nestjs/terminus";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from "@nestjs/swagger";
+import { SuperAdminOnly } from "../../common/decorators/super-admin-only.decorator";
+import { Public } from "../../common/decorators/public.decorator";
 import { HealthService } from "./health.service";
 
 @ApiTags("Health")
+@ApiBearerAuth()
+@SuperAdminOnly()
 @Controller("health")
 export class HealthController {
-  constructor(private readonly healthService: HealthService) {}
+  constructor(
+    private health: HealthCheckService,
+    private memory: MemoryHealthIndicator,
+    private disk: DiskHealthIndicator,
+    private healthService: HealthService
+  ) {}
 
   @Get()
+  @HealthCheck()
   @ApiOperation({ summary: "Basic health check" })
   @ApiResponse({ status: 200, description: "Service is healthy" })
   @ApiResponse({ status: 503, description: "Service is unhealthy" })
-  async check() {
-    const health = await this.healthService.getOverallHealth();
-
-    if (health.status === "unhealthy") {
-      throw new HttpException(
-        "Service Unavailable",
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
-    return {
-      status: health.status,
-      timestamp: health.timestamp,
-      service: "NestJS Enterprise API",
-      version: health.version,
-      environment: health.environment,
-    };
-  }
-
-  @Get("detailed")
-  @ApiOperation({ summary: "Detailed health check with all systems" })
-  @ApiResponse({ status: 200, description: "Detailed health information" })
-  @ApiResponse({ status: 503, description: "Service is unhealthy" })
-  async detailedCheck() {
-    const health = await this.healthService.getOverallHealth();
-
-    if (health.status === "unhealthy") {
-      throw new HttpException(health, HttpStatus.SERVICE_UNAVAILABLE);
-    }
-
-    return health;
+  check() {
+    return this.health.check([
+      () => this.healthService.isHealthy("database"),
+      () => this.memory.checkHeap("memory_heap", 150 * 1024 * 1024),
+      () =>
+        this.disk.checkStorage("storage", {
+          path: "/",
+          threshold: 0.9, // 90% threshold
+        }),
+    ]);
   }
 
   @Get("database")
+  @HealthCheck()
   @ApiOperation({ summary: "Database health check" })
   @ApiResponse({ status: 200, description: "Database connections are healthy" })
   @ApiResponse({
     status: 503,
     description: "Database connections are unhealthy",
   })
-  async databaseCheck() {
-    const databases = await this.healthService.checkDatabases();
-
-    const isHealthy =
-      databases.postgres.status === "healthy" &&
-      databases.mongodb.status === "healthy";
-
-    if (!isHealthy) {
-      throw new HttpException(
-        {
-          status: "unhealthy",
-          databases,
-          timestamp: new Date().toISOString(),
-        },
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
-    return {
-      status: "healthy",
-      databases,
-      timestamp: new Date().toISOString(),
-    };
+  checkDatabase() {
+    return this.health.check([
+      () => this.healthService.isHealthy("postgres"),
+      () => this.healthService.isHealthy("mongodb"),
+    ]);
   }
 
-  @Get("system")
-  @ApiOperation({ summary: "System resources health check" })
-  @ApiResponse({ status: 200, description: "System resources are healthy" })
-  @ApiResponse({ status: 503, description: "System resources are unhealthy" })
-  async systemCheck() {
-    try {
-      const system = await this.healthService.getSystemHealth();
+  @Get("memory")
+  @HealthCheck()
+  @ApiOperation({ summary: "Memory health check" })
+  @ApiResponse({ status: 200, description: "Memory usage is healthy" })
+  @ApiResponse({ status: 503, description: "Memory usage is unhealthy" })
+  checkMemory() {
+    return this.health.check([
+      () => this.memory.checkHeap("memory_heap", 150 * 1024 * 1024),
+      () => this.memory.checkRSS("memory_rss", 300 * 1024 * 1024),
+    ]);
+  }
 
-      const isHealthy =
-        system.memory.status !== "critical" && system.disk.status !== "critical";
+  @Get("disk")
+  @HealthCheck()
+  @ApiOperation({ summary: "Disk health check" })
+  @ApiResponse({ status: 200, description: "Disk usage is healthy" })
+  @ApiResponse({ status: 503, description: "Disk usage is unhealthy" })
+  checkDisk() {
+    return this.health.check([
+      () =>
+        this.disk.checkStorage("storage", {
+          path: "/",
+          threshold: 0.9, // 90% threshold
+        }),
+    ]);
+  }
 
-      if (!isHealthy) {
-        throw new HttpException(
-          {
-            status: "unhealthy",
-            system,
-            timestamp: new Date().toISOString(),
-          },
-          HttpStatus.SERVICE_UNAVAILABLE,
-        );
-      }
-
-      return {
-        status: "healthy",
-        system,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      throw new HttpException(
-        {
-          status: "error",
-          message: "System health check failed",
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+  @Get("redis")
+  @HealthCheck()
+  @ApiOperation({ summary: "Redis health check" })
+  @ApiResponse({ status: 200, description: "Redis is healthy" })
+  @ApiResponse({ status: 503, description: "Redis is unhealthy" })
+  checkRedis() {
+    return this.health.check([() => this.healthService.isHealthy("redis")]);
   }
 
   @Get("readiness")
+  @HealthCheck()
   @ApiOperation({ summary: "Kubernetes readiness probe" })
   @ApiResponse({
     status: 200,
     description: "Service is ready to accept traffic",
   })
   @ApiResponse({ status: 503, description: "Service is not ready" })
-  async readiness() {
-    const databases = await this.healthService.checkDatabases();
-
-    const isReady =
-      databases.postgres.status === "healthy" &&
-      databases.mongodb.status === "healthy";
-
-    if (!isReady) {
-      throw new HttpException(
-        "Service not ready",
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
-    return {
-      status: "ready",
-      timestamp: new Date().toISOString(),
-    };
+  readiness() {
+    return this.health.check([
+      () => this.healthService.isHealthy("postgres"),
+      () => this.healthService.isHealthy("mongodb"),
+      () => this.healthService.isHealthy("redis"),
+    ]);
   }
 
+  @Public()
   @Get("liveness")
   @ApiOperation({ summary: "Kubernetes liveness probe" })
   @ApiResponse({ status: 200, description: "Service is alive" })
   liveness() {
     return {
-      status: "alive",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
+      status: "ok",
+      info: {
+        liveness: {
+          status: "up",
+        },
+      },
+      error: {},
+      details: {
+        liveness: {
+          status: "up",
+        },
+      },
     };
+  }
+
+  @Get("detailed")
+  @HealthCheck()
+  @ApiOperation({ summary: "Detailed health check with all systems" })
+  @ApiResponse({ status: 200, description: "Detailed health information" })
+  @ApiResponse({ status: 503, description: "Service is unhealthy" })
+  detailed() {
+    return this.health.check([
+      () => this.healthService.isHealthy("postgres"),
+      () => this.healthService.isHealthy("mongodb"),
+      () => this.healthService.isHealthy("redis"),
+      () => this.memory.checkHeap("memory_heap", 150 * 1024 * 1024),
+      () => this.memory.checkRSS("memory_rss", 300 * 1024 * 1024),
+      () =>
+        this.disk.checkStorage("storage", {
+          path: "/",
+          threshold: 0.9,
+        }),
+    ]);
   }
 
   @Get("metrics")
   @ApiOperation({ summary: "Application metrics" })
   @ApiResponse({ status: 200, description: "Application metrics" })
   async metrics() {
-    const system = await this.healthService.getSystemHealth();
+    const systemHealth = await this.healthService.getSystemHealth();
 
     return {
       timestamp: new Date().toISOString(),
-      uptime: system.uptime,
-      memory: system.memory,
-      loadAverage: system.loadAverage,
+      uptime: process.uptime(),
+      memory: {
+        used: process.memoryUsage().heapUsed,
+        total: process.memoryUsage().heapTotal,
+        external: process.memoryUsage().external,
+        rss: process.memoryUsage().rss,
+      },
+      loadAverage: systemHealth.loadAverage,
       environment: process.env.NODE_ENV || "development",
       nodeVersion: process.version,
       platform: process.platform,

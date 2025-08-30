@@ -2,14 +2,22 @@ import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { AuthService } from "./auth.service";
+import { AuthService } from "./services/auth.service";
 import { AuthController } from "./auth.controller";
-import { JwtStrategy } from "./jwt.strategy";
+import { JwtStrategy } from "./strategies/jwt.strategy";
+import { RefreshTokenService } from "./services/refresh-token.service";
+import { PasswordResetService } from "./services/password-reset.service";
+import { DeviceService } from "./services/device.service";
 import { UsersModule } from "../users/users.module";
+import { CompaniesModule } from "../companies/companies.module";
+import { CacheModule } from "../../shared/cache/cache.module";
+import { TokenBlacklistService } from "./services/token-blacklist.service";
 
 @Module({
   imports: [
     UsersModule,
+    CompaniesModule,
+    CacheModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -20,8 +28,21 @@ import { UsersModule } from "../users/users.module";
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    RefreshTokenService,
+    PasswordResetService,
+    DeviceService,
+    TokenBlacklistService,
+  ],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [
+    AuthService,
+    RefreshTokenService,
+    PasswordResetService,
+    DeviceService,
+    TokenBlacklistService,
+  ],
 })
 export class AuthModule {}

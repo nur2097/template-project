@@ -4,7 +4,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { QueueService } from "./queue.service";
 import { EmailQueueProcessor, GeneralQueueProcessor } from "./queue.processor";
 import { EmailModule } from "../modules/email/email.module";
-import { LoggerModule } from "../modules/logger/logger.module";
+import { LoggerModule } from "../common/logger/logger.module";
 
 @Module({
   imports: [

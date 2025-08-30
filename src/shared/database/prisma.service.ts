@@ -1,23 +1,31 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
     super({
-      log: ['query', 'info', 'warn', 'error'],
-      errorFormat: 'pretty',
+      log: ["query", "info", "warn", "error"],
+      errorFormat: "pretty",
     });
   }
 
   async onModuleInit() {
     try {
       await this.$connect();
-      this.logger.log('✅ Connected to PostgreSQL via Prisma');
+      this.logger.log("✅ Connected to PostgreSQL via Prisma");
     } catch (error) {
-      this.logger.error('❌ Failed to connect to PostgreSQL:', error);
+      this.logger.error("❌ Failed to connect to PostgreSQL:", error);
       throw error;
     }
   }
@@ -25,9 +33,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleDestroy() {
     try {
       await this.$disconnect();
-      this.logger.log('🔌 Disconnected from PostgreSQL');
+      this.logger.log("🔌 Disconnected from PostgreSQL");
     } catch (error) {
-      this.logger.error('❌ Error disconnecting from PostgreSQL:', error);
+      this.logger.error("❌ Error disconnecting from PostgreSQL:", error);
     }
   }
 
@@ -43,12 +51,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   // Clear database for testing
   async clearDatabase() {
-    if (process.env.NODE_ENV !== 'test') {
-      throw new Error('Database clearing is only allowed in test environment');
+    if (process.env.NODE_ENV !== "test") {
+      throw new Error("Database clearing is only allowed in test environment");
     }
 
-    const models = Object.keys(this).filter(key => !key.startsWith('$') && !key.startsWith('_'));
-    
+    const models = Object.keys(this).filter(
+      (key) => !key.startsWith("$") && !key.startsWith("_")
+    );
+
     for (const model of models) {
       try {
         await this[model].deleteMany();

@@ -29,7 +29,7 @@ export class EmailQueueProcessor {
       }
 
       this.logger.log(
-        `Email sent to ${to} with subject: ${subject}, messageId: ${result.messageId}`,
+        `Email sent to ${to} with subject: ${subject}, messageId: ${result.messageId}`
       );
       return {
         success: true,
@@ -87,7 +87,7 @@ export class GeneralQueueProcessor {
       const deletedCount = Math.floor(Math.random() * 100) + 10;
 
       this.logger.log(
-        `Cleanup completed: ${deletedCount} items deleted (logs older than ${olderThanDays} days)`,
+        `Cleanup completed: ${deletedCount} items deleted (logs older than ${olderThanDays} days)`
       );
       return {
         success: true,

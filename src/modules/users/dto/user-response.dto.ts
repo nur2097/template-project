@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Exclude, Expose } from "class-transformer";
-import { UserRole, UserStatus } from "../entities/user.entity";
+import { Expose } from "class-transformer";
+import { SystemUserRole, UserStatus } from "@prisma/client";
 
 export class UserResponseDto {
   @ApiProperty()
@@ -23,9 +23,9 @@ export class UserResponseDto {
   @Expose()
   fullName: string;
 
-  @ApiProperty({ enum: UserRole })
+  @ApiProperty({ enum: SystemUserRole })
   @Expose()
-  role: UserRole;
+  systemRole: SystemUserRole;
 
   @ApiProperty({ enum: UserStatus })
   @Expose()
@@ -59,12 +59,11 @@ export class UserResponseDto {
   @Expose()
   updatedAt: Date;
 
-  @Exclude()
-  password: string;
+  @ApiProperty()
+  @Expose()
+  companyId: number;
 
-  @Exclude()
-  refreshToken: string;
-
-  @Exclude()
-  deletedAt: Date;
+  @ApiProperty({ required: false })
+  @Expose()
+  deletedAt?: Date;
 }

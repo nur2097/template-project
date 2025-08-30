@@ -1,12 +1,17 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, VersioningType } from "@nestjs/common";
 import * as compression from "compression";
 import helmet from "helmet";
+import { NestLoggerWrapper } from "./common/logger/nest-logger-wrapper";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Custom logger
+  const customLogger = app.get(NestLoggerWrapper);
+  app.useLogger(customLogger);
 
   // Security middleware
   app.use(helmet());
@@ -14,6 +19,12 @@ async function bootstrap() {
 
   // Global prefix
   app.setGlobalPrefix(process.env.API_PREFIX || "api");
+
+  // API Versioning
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: "1",
+  });
 
   // CORS
   app.enableCors({
@@ -28,7 +39,7 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-    }),
+    })
   );
 
   // Global filters & interceptors will be handled through APP_FILTER and APP_INTERCEPTOR providers
@@ -40,7 +51,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle("NestJS Enterprise API")
       .setDescription(
-        "Enterprise-ready NestJS template with comprehensive logging, monitoring, and security features",
+        "Enterprise-ready NestJS template with comprehensive logging, monitoring, and security features"
       )
       .setVersion("1.0.0")
       .addBearerAuth()

@@ -38,22 +38,36 @@ describe("UsersService", () => {
   describe("findByEmail", () => {
     it("should return user by email", async () => {
       const mockUser = { id: 1, email: "test@example.com" };
-      (mockPrismaService.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+      (mockPrismaService.user.findUnique as jest.Mock).mockResolvedValue(
+        mockUser
+      );
 
       const result = await service.findByEmail("test@example.com");
 
       expect(result).toEqual(mockUser);
-      expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith({
-        where: { 
-          email: "test@example.com",
-          status: "ACTIVE",
-          deletedAt: null,
+      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+        where: { email: "test@example.com" },
+        include: {
+          company: true,
+          roles: {
+            include: {
+              role: {
+                include: {
+                  permissions: {
+                    include: {
+                      permission: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
     });
 
     it("should return null if user not found", async () => {
-      (mockPrismaService.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (mockPrismaService.user.findUnique as jest.Mock).mockResolvedValue(null);
 
       const result = await service.findByEmail("nonexistent@example.com");
 

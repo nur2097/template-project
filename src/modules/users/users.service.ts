@@ -4,34 +4,45 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
-import { User, UserStatus, UserRole } from "@prisma/client";
-import * as bcrypt from "bcrypt";
+// Use enum values directly instead of imports to avoid Prisma client issues
+enum UserStatus {
+  ACTIVE = "ACTIVE",
+  INACTIVE = "INACTIVE",
+  SUSPENDED = "SUSPENDED",
+}
+
+import { PasswordUtil } from "../../common/utils/password.util";
 import { PrismaService } from "../../shared/database/prisma.service";
+import { CacheService } from "../../shared/cache/cache.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserResponseDto } from "./dto/user-response.dto";
 
 export interface IUsersService {
-  create(createUserDto: CreateUserDto): Promise<UserResponseDto>;
+  create(
+    createUserDto: CreateUserDto,
+    companyId: number
+  ): Promise<UserResponseDto>;
   findAll(
     page?: number,
     limit?: number,
+    companyId?: number
   ): Promise<{
     data: UserResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }>;
-  findOne(id: number): Promise<UserResponseDto>;
-  findByEmail(email: string): Promise<User | null>;
-  update(id: number, updateUserDto: UpdateUserDto): Promise<UserResponseDto>;
-  remove(id: number): Promise<void>;
-  updateRefreshToken(
-    userId: number,
-    refreshToken: string | null,
-  ): Promise<void>;
+  findOne(id: number, companyId?: number): Promise<UserResponseDto>;
+  findByEmail(email: string): Promise<any | null>;
+  update(
+    id: number,
+    updateUserDto: UpdateUserDto,
+    companyId?: number
+  ): Promise<UserResponseDto>;
+  remove(id: number, companyId?: number): Promise<void>;
   updateLastLogin(userId: number): Promise<void>;
   verifyEmail(userId: number): Promise<void>;
   changePassword(userId: number, newPassword: string): Promise<void>;
-  getUserStats(): Promise<{
+  getUserStats(companyId?: number): Promise<{
     total: number;
     active: number;
     inactive: number;
@@ -43,124 +54,181 @@ export interface IUsersService {
 export class UsersService implements IUsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService
+  ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: createUserDto.email },
-    });
+  private transformToUserResponse(user: any): UserResponseDto {
+    // Remove sensitive and relational fields
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      password: _password,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      passwordChangedAt: _passwordChangedAt,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      refreshTokens: _refreshTokens,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      roles: _roles,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      apiKeys: _apiKeys,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      sessions: _sessions,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      devices: _devices,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      passwordResets: _passwordResets,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      company: _company,
+      ...rest
+    } = user;
+    return {
+      ...rest,
+      fullName: `${user.firstName} ${user.lastName}`,
+      systemRole: user.systemRole,
+    } as UserResponseDto;
+  }
 
-    if (existingUser) {
-      throw new ConflictException("User with this email already exists");
+  async create(
+    createUserDto: CreateUserDto,
+    companyId: number
+  ): Promise<UserResponseDto> {
+    this.logger.debug(`Creating user with email: ${createUserDto.email}`);
+
+    const hashedPassword = await PasswordUtil.hash(createUserDto.password);
+
+    try {
+      const { role, ...userData } = createUserDto;
+      const user = await this.prisma.user.create({
+        data: {
+          ...userData,
+          systemRole: role,
+          password: hashedPassword,
+          companyId,
+        },
+      });
+
+      // Invalidate company cache after creating user
+      await this.cacheService.invalidateCompanyCache(companyId);
+
+      return this.transformToUserResponse(user);
+    } catch (error) {
+      // Handle unique constraint violation
+      if (error.code === "P2002" && error.meta?.target?.includes("email")) {
+        this.logger.warn(
+          `Attempt to create duplicate user: ${createUserDto.email}`
+        );
+        throw new ConflictException("User with this email already exists");
+      }
+
+      // Re-throw other errors
+      throw error;
     }
-
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-
-    const user = await this.prisma.user.create({
-      data: {
-        ...createUserDto,
-        password: hashedPassword,
-      },
-    });
-
-    // Convert to response DTO (exclude sensitive fields)
-    const { password, refreshToken, ...userResponse } = user;
-    return userResponse as UserResponseDto;
   }
 
   async findAll(
     page = 1,
     limit = 10,
+    companyId?: number
   ): Promise<{
     data: UserResponseDto[];
-    meta: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
+    meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
+    const skip = (page - 1) * limit;
+    const where = companyId ? { companyId } : {};
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
-        where: { 
-          status: UserStatus.ACTIVE,
-          deletedAt: null,
-        },
-        skip: (page - 1) * limit,
+        where,
+        skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
         select: {
           id: true,
           email: true,
           firstName: true,
           lastName: true,
-          role: true,
+          systemRole: true,
           status: true,
           avatar: true,
           phoneNumber: true,
           emailVerified: true,
           emailVerifiedAt: true,
           lastLoginAt: true,
+          companyId: true,
           createdAt: true,
           updatedAt: true,
+          deletedAt: true,
         },
+        orderBy: { createdAt: "desc" },
       }),
-      this.prisma.user.count({
-        where: { 
-          status: UserStatus.ACTIVE,
-          deletedAt: null,
-        },
-      }),
+      this.prisma.user.count({ where }),
     ]);
 
+    const totalPages = Math.ceil(total / limit);
+
     return {
-      data: users as UserResponseDto[],
+      data: users.map((user: any) => this.transformToUserResponse(user)),
       meta: {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages,
       },
     };
   }
 
-  async findOne(id: number): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findFirst({
-      where: { 
-        id, 
-        status: UserStatus.ACTIVE,
-        deletedAt: null,
-      },
+  async findOne(id: number, companyId?: number): Promise<UserResponseDto> {
+    const where: any = { id };
+    if (companyId) {
+      where.companyId = companyId;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where,
       select: {
         id: true,
         email: true,
         firstName: true,
         lastName: true,
-        role: true,
+        systemRole: true,
         status: true,
         avatar: true,
         phoneNumber: true,
         emailVerified: true,
         emailVerifiedAt: true,
         lastLoginAt: true,
+        companyId: true,
         createdAt: true,
         updatedAt: true,
+        deletedAt: true,
       },
     });
 
     if (!user) {
-      throw new NotFoundException("User not found");
+      throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    return user as UserResponseDto;
+    return this.transformToUserResponse(user);
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findFirst({
-      where: { 
-        email, 
-        status: UserStatus.ACTIVE,
-        deletedAt: null,
+  async findByEmail(email: string): Promise<any | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: true,
+        roles: {
+          include: {
+            role: {
+              include: {
+                permissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -168,32 +236,32 @@ export class UsersService implements IUsersService {
   async update(
     id: number,
     updateUserDto: UpdateUserDto,
+    companyId?: number
   ): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findFirst({
-      where: { 
-        id, 
-        status: UserStatus.ACTIVE,
-        deletedAt: null,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException("User not found");
+    const where: any = { id };
+    if (companyId) {
+      where.companyId = companyId;
     }
 
-    if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.prisma.user.findUnique({
+    const existingUser = await this.prisma.user.findUnique({ where });
+
+    if (!existingUser) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (updateUserDto.email && updateUserDto.email !== existingUser.email) {
+      const emailExists = await this.prisma.user.findUnique({
         where: { email: updateUserDto.email },
       });
 
-      if (existingUser && existingUser.id !== id) {
-        throw new ConflictException("User with this email already exists");
+      if (emailExists) {
+        throw new ConflictException("Email already exists");
       }
     }
 
-    const updateData: any = { ...updateUserDto };
+    const updateData = { ...updateUserDto };
     if (updateUserDto.password) {
-      updateData.password = await bcrypt.hash(updateUserDto.password, 10);
+      updateData.password = await PasswordUtil.hash(updateUserDto.password);
     }
 
     const updatedUser = await this.prisma.user.update({
@@ -204,52 +272,47 @@ export class UsersService implements IUsersService {
         email: true,
         firstName: true,
         lastName: true,
-        role: true,
+        systemRole: true,
         status: true,
         avatar: true,
         phoneNumber: true,
         emailVerified: true,
         emailVerifiedAt: true,
         lastLoginAt: true,
+        companyId: true,
         createdAt: true,
         updatedAt: true,
+        deletedAt: true,
       },
     });
 
-    return updatedUser as UserResponseDto;
-  }
-
-  async remove(id: number): Promise<void> {
-    const user = await this.prisma.user.findFirst({
-      where: { 
-        id, 
-        status: UserStatus.ACTIVE,
-        deletedAt: null,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException("User not found");
+    // Invalidate user and company cache
+    await this.cacheService.invalidateUserCache(id);
+    if (companyId) {
+      await this.cacheService.invalidateCompanyCache(companyId);
     }
 
-    // Soft delete
-    await this.prisma.user.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    return this.transformToUserResponse(updatedUser);
   }
 
-  async updateRefreshToken(
-    userId: number,
-    refreshToken: string | null,
-  ): Promise<void> {
-    const hashedRefreshToken = refreshToken
-      ? await bcrypt.hash(refreshToken, 10)
-      : null;
-    
+  async remove(id: number, companyId?: number): Promise<void> {
+    const where: any = { id };
+    if (companyId) {
+      where.companyId = companyId;
+    }
+
+    const user = await this.prisma.user.findUnique({ where });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
     await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: hashedRefreshToken },
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        status: UserStatus.INACTIVE,
+      },
     });
   }
 
@@ -271,41 +334,43 @@ export class UsersService implements IUsersService {
   }
 
   async changePassword(userId: number, newPassword: string): Promise<void> {
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await PasswordUtil.hash(newPassword);
+
     await this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword },
+      data: {
+        password: hashedPassword,
+        passwordChangedAt: new Date(),
+      },
     });
   }
 
-  async getUserStats(): Promise<{
+  async getUserStats(companyId?: number): Promise<{
     total: number;
     active: number;
     inactive: number;
     suspended: number;
   }> {
+    const where = companyId ? { companyId } : {};
+
     const [total, active, inactive, suspended] = await Promise.all([
-      this.prisma.user.count({ where: { deletedAt: null } }),
-      this.prisma.user.count({ 
-        where: { 
-          status: UserStatus.ACTIVE,
-          deletedAt: null,
-        },
+      this.prisma.user.count({ where }),
+      this.prisma.user.count({
+        where: { ...where, status: UserStatus.ACTIVE },
       }),
-      this.prisma.user.count({ 
-        where: { 
-          status: UserStatus.INACTIVE,
-          deletedAt: null,
-        },
+      this.prisma.user.count({
+        where: { ...where, status: UserStatus.INACTIVE },
       }),
-      this.prisma.user.count({ 
-        where: { 
-          status: UserStatus.SUSPENDED,
-          deletedAt: null,
-        },
+      this.prisma.user.count({
+        where: { ...where, status: UserStatus.SUSPENDED },
       }),
     ]);
 
-    return { total, active, inactive, suspended };
+    return {
+      total,
+      active,
+      inactive,
+      suspended,
+    };
   }
 }

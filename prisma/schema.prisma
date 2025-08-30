@@ -10,10 +10,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  USER
+enum SystemUserRole {
+  SUPERADMIN
   ADMIN
   MODERATOR
+  USER
 }
 
 enum UserStatus {
@@ -22,89 +23,187 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// Multi-tenant Company model
+model Company {
+  id        Int           @id @default(autoincrement())
+  name      String
+  slug      String        @unique
+  domain    String?       @unique
+  status    CompanyStatus @default(ACTIVE)
+  settings  Json?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  users         User[]
+  roles         Role[]
+  permissions   Permission[]
+  devices       Device[]
+  refreshTokens RefreshToken[]
+
+  @@map("companies")
+}
+
+// RBAC Permission model
+model Permission {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  resource    String
+  action      String
+  companyId   Int      @map("company_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roles     RolePermission[]
+
+  @@unique([name, companyId])
+  @@map("permissions")
+}
+
+// RBAC Role model
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  companyId   Int      @map("company_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([name, companyId])
+  @@map("roles")
+}
+
+// Role-Permission junction table
+model RolePermission {
+  id           Int @id @default(autoincrement())
+  roleId       Int @map("role_id")
+  permissionId Int @map("permission_id")
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// User-Role junction table
+model UserRole {
+  id     Int @id @default(autoincrement())
+  userId Int @map("user_id")
+  roleId Int @map("role_id")
+
+  // Relations
+  user User @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+// Device tracking model
+model Device {
+  id            String   @id @default(cuid())
+  deviceId      String   @map("device_id")
+  deviceType    String   @map("device_type")
+  deviceName    String?  @map("device_name")
+  browser       String?
+  os            String?
+  ip            String?
+  userAgent     String?  @map("user_agent")
+  userId        Int      @map("user_id")
+  companyId     Int      @map("company_id")
+  isActive      Boolean  @default(true) @map("is_active")
+  lastAccessAt  DateTime @default(now()) @map("last_access_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user          User           @relation("UserDevices", fields: [userId], references: [id], onDelete: Cascade)
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@unique([deviceId, userId])
+  @@map("devices")
+}
+
+// Refresh Token model
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    Int      @map("user_id")
+  companyId Int      @map("company_id")
+  deviceId  String   @map("device_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User    @relation("UserRefreshTokens", fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
 model User {
   id               Int         @id @default(autoincrement())
   email            String      @unique
   firstName        String      @map("first_name")
   lastName         String      @map("last_name")
   password         String
-  role             UserRole    @default(USER)
+  systemRole       SystemUserRole @default(USER) @map("system_role")
   status           UserStatus  @default(ACTIVE)
   avatar           String?
   phoneNumber      String?     @map("phone_number")
   emailVerified    Boolean     @default(false) @map("email_verified")
   emailVerifiedAt  DateTime?   @map("email_verified_at")
   lastLoginAt      DateTime?   @map("last_login_at")
-  refreshToken     String?     @map("refresh_token")
+  passwordChangedAt DateTime?  @map("password_changed_at")
+  companyId        Int         @map("company_id")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
   deletedAt        DateTime?   @map("deleted_at")
 
   // Relations
-  apiKeys      ApiKey[]      @relation("UserApiKeys")
-  sessions     UserSession[] @relation("UserSessions")
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roles            UserRole[]        @relation("UserRoles")
+  apiKeys          ApiKey[]          @relation("UserApiKeys")
+  sessions         UserSession[]     @relation("UserSessions")
+  devices          Device[]          @relation("UserDevices")
+  refreshTokens    RefreshToken[]    @relation("UserRefreshTokens")
+  passwordResets   PasswordReset[]   @relation("UserPasswordResets")
 
   @@map("users")
 }
 
-// Performance Logs Model for Analytics
-model PerformanceLog {
-  id          Int      @id @default(autoincrement())
-  operation   String
-  duration    Int      // milliseconds
-  method      String?
-  url         String?
-  statusCode  Int?
-  userId      Int?
-  userAgent   String?
-  ip          String?
-  timestamp   DateTime @default(now())
-  metadata    Json?
+// Password Reset Model
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    Int      @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("performance_logs")
+  // Relations
+  user User @relation("UserPasswordResets", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
 }
 
-// Request Logs Model
-model RequestLog {
-  id          Int      @id @default(autoincrement())
-  method      String
-  url         String
-  headers     Json?
-  body        Json?
-  userAgent   String?  @map("user_agent")
-  ip          String?
-  userId      Int?     @map("user_id")
-  timestamp   DateTime @default(now())
-
-  @@map("request_logs")
-}
-
-// Response Logs Model  
-model ResponseLog {
-  id           Int      @id @default(autoincrement())
-  method       String
-  url          String
-  statusCode   Int      @map("status_code")
-  responseTime Int      @map("response_time") // milliseconds
-  userId       Int?     @map("user_id")
-  timestamp    DateTime @default(now())
-
-  @@map("response_logs")
-}
-
-// Error Logs Model
-model ErrorLog {
-  id        Int      @id @default(autoincrement())
-  message   String
-  stack     String?
-  context   String?
-  userId    Int?     @map("user_id")
-  level     String   @default("error")
-  timestamp DateTime @default(now())
-  metadata  Json?
-
-  @@map("error_logs")
-}
 
 // API Keys/Tokens Model
 model ApiKey {

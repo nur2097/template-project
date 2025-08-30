@@ -6,7 +6,7 @@ import { Queue } from "bull";
 export class QueueService {
   constructor(
     @InjectQueue("email") private emailQueue: Queue,
-    @InjectQueue("general") private generalQueue: Queue,
+    @InjectQueue("general") private generalQueue: Queue
   ) {}
 
   async addEmailJob(name: string, data: any) {

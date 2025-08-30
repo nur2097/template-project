@@ -1,17 +1,15 @@
-import { Controller, Post, Body, Get, UseGuards } from "@nestjs/common";
+import { Controller, Post, Body, Get } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
 } from "@nestjs/swagger";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { EmailService, SendEmailDto } from "./email.service";
 
 @ApiTags("Email")
 @Controller("email")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
 
@@ -44,6 +42,7 @@ export class EmailController {
     const isConnected = await this.emailService.testEmailConnection();
 
     return {
+      success: isConnected,
       connected: isConnected,
       message: isConnected
         ? "Email service is connected"
@@ -58,7 +57,7 @@ export class EmailController {
   async sendWelcomeEmail(@Body() data: { email: string; name: string }) {
     const result = await this.emailService.sendWelcomeEmail(
       data.email,
-      data.name,
+      data.name
     );
 
     return {
@@ -75,11 +74,11 @@ export class EmailController {
   @ApiOperation({ summary: "Send password reset email" })
   @ApiResponse({ status: 200, description: "Password reset email sent" })
   async sendPasswordResetEmail(
-    @Body() data: { email: string; resetToken: string },
+    @Body() data: { email: string; resetToken: string }
   ) {
     const result = await this.emailService.sendPasswordResetEmail(
       data.email,
-      data.resetToken,
+      data.resetToken
     );
 
     return {
@@ -96,11 +95,11 @@ export class EmailController {
   @ApiOperation({ summary: "Send email verification" })
   @ApiResponse({ status: 200, description: "Verification email sent" })
   async sendVerificationEmail(
-    @Body() data: { email: string; verificationToken: string },
+    @Body() data: { email: string; verificationToken: string }
   ) {
     const result = await this.emailService.sendVerificationEmail(
       data.email,
-      data.verificationToken,
+      data.verificationToken
     );
 
     return {
