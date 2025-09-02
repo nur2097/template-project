@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { PasswordUtil } from "../../../common/utils/password.util";
@@ -31,6 +31,8 @@ export interface TokenPayload {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -50,10 +52,10 @@ export class AuthService {
       registerDto.companySlug
     );
 
-    // TODO: Add invitation code validation logic here if required
-    // if (registerDto.invitationCode) {
-    //   await this.validateInvitationCode(company.id, registerDto.invitationCode);
-    // }
+    // Validate invitation code if provided
+    if (registerDto.invitationCode) {
+      await this.validateInvitationCode(company.id, registerDto.invitationCode);
+    }
 
     // Create user DTO from register DTO
     const createUserDto: CreateUserDto = {
@@ -215,6 +217,28 @@ export class AuthService {
     return this.refreshTokenService.getUserActiveSessions(userId);
   }
 
+  /**
+   * Invalidate user permissions by blacklisting all tokens
+   * Call this when user roles/permissions change
+   */
+  async invalidateUserPermissions(userId: number): Promise<void> {
+    this.logger.log(`Invalidating permissions for user ${userId}`);
+    await this.tokenBlacklistService.blacklistUserTokens(userId);
+  }
+
+  /**
+   * Invalidate permissions for multiple users
+   * Call this when company roles/permissions change
+   */
+  async invalidateUsersPermissions(userIds: number[]): Promise<void> {
+    this.logger.log(`Invalidating permissions for ${userIds.length} users`);
+    await Promise.all(
+      userIds.map((userId) =>
+        this.tokenBlacklistService.blacklistUserTokens(userId)
+      )
+    );
+  }
+
   private async validateUser(email: string, password: string): Promise<any> {
     const user = await this.usersService.findByEmail(email);
 
@@ -244,6 +268,10 @@ export class AuthService {
     user: any,
     deviceId?: string
   ): Promise<string> {
+    // Ensure we have fresh user data with permissions
+    const userWithPermissions =
+      await this.usersService.findByEmailWithPermissions(user.email);
+
     const payload: TokenPayload = {
       sub: user.id,
       email: user.email,
@@ -251,8 +279,8 @@ export class AuthService {
       lastName: user.lastName,
       systemRole: user.systemRole,
       companyId: user.companyId,
-      roles: user.roles?.map((ur: any) => ur.role.name) || [],
-      permissions: this.extractPermissions(user.roles || []),
+      roles: userWithPermissions?.roles?.map((ur: any) => ur.role.name) || [],
+      permissions: this.extractPermissions(userWithPermissions?.roles || []),
       deviceId: deviceId || "unknown",
     };
 
@@ -272,5 +300,50 @@ export class AuthService {
     });
 
     return Array.from(permissions);
+  }
+
+  /**
+   * Validate invitation code for company registration
+   * TODO: Implement proper invitation system with database table
+   */
+  private async validateInvitationCode(
+    companyId: number,
+    invitationCode: string
+  ): Promise<void> {
+    this.logger.debug(
+      `Validating invitation code for company ${companyId}: ${invitationCode}`
+    );
+
+    // For now, accept any invitation code in development
+    // In production, this should validate against a real invitation system
+    if (process.env.NODE_ENV === "development") {
+      this.logger.debug("Development mode: accepting any invitation code");
+      return;
+    }
+
+    // TODO: Implement real invitation validation
+    // Example logic:
+    // const invitation = await this.prisma.invitation.findFirst({
+    //   where: {
+    //     code: invitationCode,
+    //     companyId: companyId,
+    //     expiresAt: { gt: new Date() },
+    //     used: false,
+    //   },
+    // });
+    //
+    // if (!invitation) {
+    //   throw new UnauthorizedException('Invalid or expired invitation code');
+    // }
+    //
+    // // Mark invitation as used
+    // await this.prisma.invitation.update({
+    //   where: { id: invitation.id },
+    //   data: { used: true, usedAt: new Date() },
+    // });
+
+    throw new UnauthorizedException(
+      "Invitation code validation not implemented yet"
+    );
   }
 }

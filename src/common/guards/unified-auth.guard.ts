@@ -12,7 +12,7 @@ import { SystemUserRole } from "@prisma/client";
 import { AuthRequirement } from "../types/auth.types";
 import { REQUIRE_AUTH_KEY } from "../decorators/require-auth.decorator";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
-export const SUPER_ADMIN_ONLY_KEY = "superAdminOnly";
+import { SUPER_ADMIN_ONLY_KEY } from "../decorators/super-admin-only.decorator";
 import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 import { ROLES_KEY } from "../decorators/roles.decorator";
 import { TokenBlacklistService } from "../../modules/auth/services/token-blacklist.service";
@@ -67,16 +67,10 @@ export class UnifiedAuthGuard implements CanActivate {
     this.enforceCompanyIsolation(request, user);
 
     // 5. PERMISSIONS CHECK
-    const permissionsResult = this.checkPermissions(context, user);
-    if (!permissionsResult) {
-      throw new ForbiddenException("Insufficient permissions");
-    }
+    this.checkPermissions(context, user);
 
     // 6. COMPANY ROLES CHECK
-    const rolesResult = this.checkCompanyRoles(context, user);
-    if (!rolesResult) {
-      throw new ForbiddenException("Insufficient role privileges");
-    }
+    this.checkCompanyRoles(context, user);
 
     return true;
   }
@@ -150,12 +144,35 @@ export class UnifiedAuthGuard implements CanActivate {
   ): boolean {
     for (const requirement of requirements) {
       if (!this.checkSingleAuthRequirement(requirement, user)) {
-        throw new ForbiddenException(
-          `Access denied: ${JSON.stringify(requirement)}`
+        const errorMessage = this.buildRequirementErrorMessage(
+          requirement,
+          user
         );
+        this.logger.warn(`Access denied for user ${user.sub}: ${errorMessage}`);
+        throw new ForbiddenException(errorMessage);
       }
     }
     return true;
+  }
+
+  private buildRequirementErrorMessage(
+    requirement: AuthRequirement,
+    user: any
+  ): string {
+    if (Array.isArray(requirement)) {
+      return `Missing required combination: ${requirement.join(" AND ")}`;
+    }
+
+    if (typeof requirement === "string") {
+      if (["SUPERADMIN", "ADMIN", "MODERATOR", "USER"].includes(requirement)) {
+        return `Requires ${requirement} role (current: ${user.systemRole})`;
+      }
+      if (requirement.includes(".")) {
+        return `Missing permission: ${requirement}`;
+      }
+    }
+
+    return `Access denied: ${JSON.stringify(requirement)}`;
   }
 
   private checkSingleAuthRequirement(
@@ -211,65 +228,119 @@ export class UnifiedAuthGuard implements CanActivate {
   }
 
   private enforceCompanyIsolation(request: any, user: any): void {
-    // SUPERADMIN bypasses company isolation but still needs company context for services
+    // SUPERADMIN bypasses company isolation
     if (user.systemRole === SystemUserRole.SUPERADMIN) {
-      // CRITICAL FIX: Set global context for SUPERADMIN
-      request.companyId = user.companyId || null;
-      request.company = user.companyId
-        ? { id: user.companyId, isSuperAdminContext: true }
-        : { id: null, isSuperAdminContext: true, isGlobalAccess: true };
+      // Check if query parameter specifies target company for SUPERADMIN
+      const targetCompanyId = request.query?.companyId
+        ? parseInt(request.query.companyId)
+        : user.companyId;
+
+      // Set context for SUPERADMIN
+      request.companyId = targetCompanyId || null;
+      request.company = {
+        id: targetCompanyId || null,
+        isSuperAdminContext: true,
+        isGlobalAccess: !targetCompanyId,
+        originalCompanyId: user.companyId,
+      };
       request.isSuperAdmin = true;
+
+      this.logger.debug(
+        `SUPERADMIN context: companyId=${request.companyId}, globalAccess=${!targetCompanyId}`
+      );
       return;
     }
 
     // All other users must belong to a company
     if (!user.companyId) {
+      this.logger.error(`User ${user.sub} does not belong to any company`);
       throw new ForbiddenException("User must belong to a company");
     }
 
-    // Set company context for services
+    // Set company context for regular users
     request.companyId = user.companyId;
-    request.company = { id: user.companyId, isSuperAdminContext: false };
+    request.company = {
+      id: user.companyId,
+      isSuperAdminContext: false,
+    };
     request.isSuperAdmin = false;
+
+    this.logger.debug(
+      `User context: userId=${user.sub}, companyId=${user.companyId}`
+    );
   }
 
-  private checkPermissions(context: ExecutionContext, user: any): boolean {
+  private checkPermissions(context: ExecutionContext, user: any): void {
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()]
     );
 
     if (!requiredPermissions || requiredPermissions.length === 0) {
-      return true;
+      return;
     }
 
     // SUPERADMIN has all permissions
     if (user.systemRole === SystemUserRole.SUPERADMIN) {
-      return true;
+      this.logger.debug(
+        `SUPERADMIN ${user.sub} granted access to permissions: ${requiredPermissions.join(", ")}`
+      );
+      return;
     }
 
     // Check if user has all required permissions
-    return requiredPermissions.every((permission) =>
-      user.permissions?.includes(permission)
+    const missingPermissions = requiredPermissions.filter(
+      (permission) => !user.permissions?.includes(permission)
+    );
+
+    if (missingPermissions.length > 0) {
+      this.logger.warn(
+        `User ${user.sub} missing permissions: ${missingPermissions.join(", ")} (has: ${user.permissions?.join(", ") || "none"})`
+      );
+      throw new ForbiddenException(
+        `Missing required permissions: ${missingPermissions.join(", ")}`
+      );
+    }
+
+    this.logger.debug(
+      `User ${user.sub} granted access with permissions: ${requiredPermissions.join(", ")}`
     );
   }
 
-  private checkCompanyRoles(context: ExecutionContext, user: any): boolean {
+  private checkCompanyRoles(context: ExecutionContext, user: any): void {
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()]
     );
 
     if (!requiredRoles || requiredRoles.length === 0) {
-      return true;
+      return;
     }
 
     // SUPERADMIN bypasses company role checks
     if (user.systemRole === SystemUserRole.SUPERADMIN) {
-      return true;
+      this.logger.debug(
+        `SUPERADMIN ${user.sub} granted access bypassing role requirements: ${requiredRoles.join(", ")}`
+      );
+      return;
     }
 
-    // Check if user has any of the required roles
-    return requiredRoles.some((role) => user.roles?.includes(role));
+    // Check if user has any of the required roles (OR logic)
+    const hasRequiredRole = requiredRoles.some((role) =>
+      user.roles?.includes(role)
+    );
+
+    if (!hasRequiredRole) {
+      this.logger.warn(
+        `User ${user.sub} missing required roles: ${requiredRoles.join(" OR ")} (has: ${user.roles?.join(", ") || "none"})`
+      );
+      throw new ForbiddenException(
+        `Missing required roles: ${requiredRoles.join(" OR ")}`
+      );
+    }
+
+    this.logger.debug(
+      `User ${user.sub} granted access with roles: ${user.roles?.join(", ")}`
+    );
   }
 }

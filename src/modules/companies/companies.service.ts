@@ -99,6 +99,95 @@ export class CompaniesService {
           },
         });
 
+        // Create default permissions for the company
+        const defaultPermissions = [
+          {
+            name: "users.read",
+            resource: "users",
+            action: "read",
+            description: "View users",
+          },
+          {
+            name: "users.write",
+            resource: "users",
+            action: "write",
+            description: "Create and update users",
+          },
+          {
+            name: "users.delete",
+            resource: "users",
+            action: "delete",
+            description: "Delete users",
+          },
+          {
+            name: "roles.read",
+            resource: "roles",
+            action: "read",
+            description: "View roles and permissions",
+          },
+          {
+            name: "roles.write",
+            resource: "roles",
+            action: "write",
+            description: "Manage roles and permissions",
+          },
+          {
+            name: "company.read",
+            resource: "company",
+            action: "read",
+            description: "View company details",
+          },
+          {
+            name: "company.write",
+            resource: "company",
+            action: "write",
+            description: "Update company settings",
+          },
+        ];
+
+        const createdPermissions = await Promise.all(
+          defaultPermissions.map(async (perm) =>
+            prisma.permission.create({
+              data: {
+                name: perm.name,
+                description: perm.description,
+                resource: perm.resource,
+                action: perm.action,
+                companyId: company.id,
+              },
+            })
+          )
+        );
+
+        // Create default admin role
+        const adminRole = await prisma.role.create({
+          data: {
+            name: "Company Admin",
+            description: "Full administrative access to company resources",
+            companyId: company.id,
+          },
+        });
+
+        // Assign all permissions to admin role
+        await Promise.all(
+          createdPermissions.map(async (permission) =>
+            prisma.rolePermission.create({
+              data: {
+                roleId: adminRole.id,
+                permissionId: permission.id,
+              },
+            })
+          )
+        );
+
+        // Assign admin role to admin user
+        await prisma.userRole.create({
+          data: {
+            userId: adminUser.id,
+            roleId: adminRole.id,
+          },
+        });
+
         return { company, adminUser };
       });
 

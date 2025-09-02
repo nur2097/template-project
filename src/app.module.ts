@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { JwtModule } from "@nestjs/jwt";
 import { BullModule } from "@nestjs/bull";
 import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from "@nestjs/core";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
 import { CompaniesModule } from "./modules/companies/companies.module";
+import { RolesModule } from "./modules/roles/roles.module";
 import { LoggerModule } from "./common/logger/logger.module";
 import { HealthModule } from "./modules/health/health.module";
 import { EmailModule } from "./modules/email/email.module";
@@ -28,6 +30,15 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
       isGlobal: true,
       envFilePath: [".env.development", ".env"],
     }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get("JWT_SECRET") || "dev-jwt-secret",
+        signOptions: { expiresIn: config.get("JWT_EXPIRES_IN") || "1d" },
+      }),
+      global: true,
+    }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -46,6 +57,7 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
     AuthModule,
     UsersModule,
     CompaniesModule,
+    RolesModule,
     LoggerModule,
     HealthModule,
     EmailModule,

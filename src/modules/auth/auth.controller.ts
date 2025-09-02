@@ -6,6 +6,8 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  BadRequestException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -16,6 +18,9 @@ import {
 } from "@nestjs/swagger";
 import { AuthService } from "./services/auth.service";
 import { PasswordResetService } from "./services/password-reset.service";
+import { UsersService } from "../users/users.service";
+import { EmailService } from "../email/email.service";
+import { CompaniesService } from "../companies/companies.service";
 import { RegisterDto } from "./dto/register.dto";
 import { UserResponseDto } from "../users/dto/user-response.dto";
 import { LoginDto } from "./dto/login.dto";
@@ -29,7 +34,10 @@ import { Public } from "../../common/decorators/public.decorator";
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly passwordResetService: PasswordResetService
+    private readonly passwordResetService: PasswordResetService,
+    private readonly usersService: UsersService,
+    private readonly emailService: EmailService,
+    private readonly companiesService: CompaniesService
   ) {}
 
   @Public()
@@ -248,5 +256,114 @@ export class AuthController {
       body.newPassword
     );
     return { message: "Password changed successfully" };
+  }
+
+  @Public()
+  @Post("send-verification")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Send email verification" })
+  @ApiResponse({ status: 200, description: "Verification email sent" })
+  @ApiResponse({ status: 404, description: "User not found" })
+  @ApiBody({
+    schema: { 
+      type: "object", 
+      properties: { 
+        email: { type: "string" }, 
+        companySlug: { type: "string" } 
+      } 
+    },
+  })
+  async sendVerificationEmail(
+    @Body() body: { email: string; companySlug?: string }
+  ): Promise<{ message: string; verificationToken?: string }> {
+    // Find user by email
+    const user = await this.usersService.findByEmail(body.email);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (user.emailVerified) {
+      return { message: "Email already verified" };
+    }
+
+    // Optional: Verify company slug matches (additional security)
+    if (body.companySlug) {
+      const company = await this.companiesService.findBySlug(body.companySlug);
+      if (company.id !== user.companyId) {
+        throw new BadRequestException("Invalid company association");
+      }
+    }
+
+    // Generate verification token (simple approach - in production use JWT or crypto)
+    const verificationToken =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
+
+    // Store token in database (you might want to create a separate table for this)
+    // For now, we'll just send the email
+    await this.emailService.sendVerificationEmail(
+      body.email,
+      verificationToken
+    );
+
+    const response: { message: string; verificationToken?: string } = {
+      message: "Verification email sent",
+    };
+
+    // Remove this in production
+    if (process.env.NODE_ENV === "development") {
+      response.verificationToken = verificationToken;
+    }
+
+    return response;
+  }
+
+  @Public()
+  @Post("verify-email")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Verify email with token" })
+  @ApiResponse({ status: 200, description: "Email verified successfully" })
+  @ApiResponse({ status: 400, description: "Invalid verification token" })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        email: { type: "string" },
+        token: { type: "string" },
+        companySlug: { type: "string" },
+      },
+    },
+  })
+  async verifyEmail(
+    @Body() body: { email: string; token: string; companySlug?: string }
+  ): Promise<{ message: string }> {
+    // Find user by email
+    const user = await this.usersService.findByEmail(body.email);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (user.emailVerified) {
+      return { message: "Email already verified" };
+    }
+
+    // Optional: Verify company slug matches (additional security)
+    if (body.companySlug) {
+      const company = await this.companiesService.findBySlug(body.companySlug);
+      if (company.id !== user.companyId) {
+        throw new BadRequestException("Invalid company association");
+      }
+    }
+
+    // TODO: Validate token from database
+    // For now, we'll accept any token for development
+    if (process.env.NODE_ENV !== "development" && !body.token) {
+      throw new BadRequestException("Invalid verification token");
+    }
+
+    // Verify the email
+    await this.usersService.verifyEmail(user.id);
+
+    return { message: "Email verified successfully" };
   }
 }

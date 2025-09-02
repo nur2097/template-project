@@ -33,6 +33,7 @@ export interface IUsersService {
   }>;
   findOne(id: number, companyId?: number): Promise<UserResponseDto>;
   findByEmail(email: string): Promise<any | null>;
+  findByEmailWithPermissions(email: string): Promise<any | null>;
   update(
     id: number,
     updateUserDto: UpdateUserDto,
@@ -212,6 +213,28 @@ export class UsersService implements IUsersService {
   }
 
   async findByEmail(email: string): Promise<any | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        company: true,
+        roles: {
+          include: {
+            role: {
+              include: {
+                permissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async findByEmailWithPermissions(email: string): Promise<any | null> {
     return this.prisma.user.findUnique({
       where: { email },
       include: {

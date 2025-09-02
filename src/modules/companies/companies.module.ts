@@ -1,12 +1,13 @@
 import { Module } from "@nestjs/common";
 import { CompaniesService } from "./companies.service";
 import { CompaniesController } from "./companies.controller";
-import { PrismaService } from "../../shared/database/prisma.service";
-import { CacheService } from "../../shared/cache/cache.service";
+import { DatabaseModule } from "../../shared/database/database.module";
+import { CacheModule } from "../../shared/cache/cache.module";
 
 @Module({
+  imports: [DatabaseModule, CacheModule],
   controllers: [CompaniesController],
-  providers: [CompaniesService, PrismaService, CacheService],
+  providers: [CompaniesService],
   exports: [CompaniesService],
 })
 export class CompaniesModule {}
