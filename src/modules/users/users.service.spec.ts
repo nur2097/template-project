@@ -1,10 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { UsersService } from "./users.service";
 import { PrismaService } from "../../shared/database/prisma.service";
+import { CacheService } from "../../shared/cache/cache.service";
 
 describe("UsersService", () => {
   let service: UsersService;
   let mockPrismaService: Partial<PrismaService>;
+  let mockCacheService: Partial<CacheService>;
 
   beforeEach(async () => {
     mockPrismaService = {
@@ -18,12 +20,22 @@ describe("UsersService", () => {
       } as any,
     };
 
+    mockCacheService = {
+      get: jest.fn(),
+      set: jest.fn(),
+      del: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: CacheService,
+          useValue: mockCacheService,
         },
       ],
     }).compile();

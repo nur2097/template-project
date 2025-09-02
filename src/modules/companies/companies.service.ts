@@ -13,6 +13,7 @@ import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyResponseDto } from "./dto/company-response.dto";
 import { SystemUserRole } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { ValidationUtil } from "../../common/utils";
 
 @Injectable()
 export class CompaniesService {
@@ -40,6 +41,10 @@ export class CompaniesService {
 
     // Check if domain is already used (if provided)
     if (registerCompanyDto.domain) {
+      if (!ValidationUtil.isValidDomain(registerCompanyDto.domain)) {
+        throw new BadRequestException("Invalid domain format");
+      }
+
       const existingDomain = await this.prisma.company.findUnique({
         where: { domain: registerCompanyDto.domain },
       });
@@ -229,6 +234,10 @@ export class CompaniesService {
 
     // Check if domain is already used (if provided)
     if (createCompanyDto.domain) {
+      if (!ValidationUtil.isValidDomain(createCompanyDto.domain)) {
+        throw new BadRequestException("Invalid domain format");
+      }
+
       const existingDomain = await this.prisma.company.findUnique({
         where: { domain: createCompanyDto.domain },
       });
@@ -387,6 +396,10 @@ export class CompaniesService {
       updateCompanyDto.domain &&
       updateCompanyDto.domain !== existingCompany.domain
     ) {
+      if (!ValidationUtil.isValidDomain(updateCompanyDto.domain)) {
+        throw new BadRequestException("Invalid domain format");
+      }
+
       const domainExists = await this.prisma.company.findUnique({
         where: { domain: updateCompanyDto.domain },
       });

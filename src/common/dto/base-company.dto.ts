@@ -6,7 +6,9 @@ import {
   Matches,
   IsOptional,
   IsObject,
+  Validate,
 } from "class-validator";
+import { DomainValidator } from "../validators";
 
 export class BaseCompanyDto {
   @ApiProperty({
@@ -32,12 +34,13 @@ export class BaseCompanyDto {
 
   @ApiProperty({
     example: "acme.com",
-    description: "Company domain",
+    description: "Company domain (must be a valid domain format)",
     required: false,
   })
   @IsOptional()
   @IsString()
   @MaxLength(255)
+  @Validate(DomainValidator)
   domain?: string;
 
   @ApiProperty({

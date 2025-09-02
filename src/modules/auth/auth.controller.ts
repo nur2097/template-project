@@ -265,12 +265,12 @@ export class AuthController {
   @ApiResponse({ status: 200, description: "Verification email sent" })
   @ApiResponse({ status: 404, description: "User not found" })
   @ApiBody({
-    schema: { 
-      type: "object", 
-      properties: { 
-        email: { type: "string" }, 
-        companySlug: { type: "string" } 
-      } 
+    schema: {
+      type: "object",
+      properties: {
+        email: { type: "string" },
+        companySlug: { type: "string" },
+      },
     },
   })
   async sendVerificationEmail(

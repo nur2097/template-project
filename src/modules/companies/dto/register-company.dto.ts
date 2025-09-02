@@ -3,10 +3,11 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  MinLength,
   IsEmail,
+  Validate,
 } from "class-validator";
 import { BaseCompanyDto } from "../../../common/dto/base-company.dto";
+import { PasswordStrengthValidator } from "../../../common/validators";
 
 export class RegisterCompanyDto extends BaseCompanyDto {
   // Admin User Information
@@ -35,13 +36,14 @@ export class RegisterCompanyDto extends BaseCompanyDto {
   adminLastName: string;
 
   @ApiProperty({
-    description: "Admin user password (minimum 6 characters)",
-    example: "password123",
-    minLength: 6,
+    description:
+      "Admin user password (minimum 8 characters, must contain uppercase, lowercase, number and special character)",
+    example: "MySecure123!",
+    minLength: 8,
   })
   @IsString()
   @IsNotEmpty({ message: "Admin password is required" })
-  @MinLength(6, { message: "Password must be at least 6 characters long" })
+  @Validate(PasswordStrengthValidator)
   adminPassword: string;
 
   @ApiProperty({
