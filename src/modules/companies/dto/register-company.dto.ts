@@ -7,7 +7,11 @@ import {
   Validate,
 } from "class-validator";
 import { BaseCompanyDto } from "../../../common/dto/base-company.dto";
-import { PasswordStrengthValidator } from "../../../common/validators";
+import {
+  IsAllowedEmailDomain,
+  IsValidPhoneNumber,
+} from "../../../common/validators";
+import { PasswordStrengthValidator } from "../../../common/validators/password-strength.validator";
 
 export class RegisterCompanyDto extends BaseCompanyDto {
   // Admin User Information
@@ -17,6 +21,11 @@ export class RegisterCompanyDto extends BaseCompanyDto {
   })
   @IsEmail({}, { message: "Please provide a valid email address" })
   @IsNotEmpty({ message: "Admin email is required" })
+  @IsAllowedEmailDomain(
+    [], // No specific allowed domains
+    ["tempmail.org", "10minutemail.com", "guerrillamail.com", "mailinator.com"],
+    { message: "Temporary email addresses are not allowed for admin accounts" }
+  )
   adminEmail: string;
 
   @ApiProperty({
@@ -47,11 +56,13 @@ export class RegisterCompanyDto extends BaseCompanyDto {
   adminPassword: string;
 
   @ApiProperty({
-    description: "Admin user phone number",
+    description: "Admin user phone number in international format",
     example: "+1234567890",
     required: false,
   })
   @IsOptional()
-  @IsString()
+  @IsValidPhoneNumber({
+    message: "Phone number must be in international format (e.g., +1234567890)",
+  })
   adminPhoneNumber?: string;
 }

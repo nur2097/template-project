@@ -321,7 +321,7 @@ export class HealthService extends HealthIndicator {
       }
     } catch (error) {
       // Fallback to environment variables if commands fail
-      console.warn(
+      this.logger.warn(
         "Could not get real disk usage, using fallback:",
         error.message
       );
@@ -416,7 +416,7 @@ export class HealthService extends HealthIndicator {
 
       return { total, free, used };
     } catch (error) {
-      console.warn("Unix disk usage command failed:", error.message);
+      this.logger.warn("Unix disk usage command failed:", error.message);
       throw new Error(`Unix disk usage failed: ${error.message}`);
     }
   }

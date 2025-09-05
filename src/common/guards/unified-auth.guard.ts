@@ -16,17 +16,22 @@ import { SUPER_ADMIN_ONLY_KEY } from "../decorators/super-admin-only.decorator";
 import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 import { ROLES_KEY } from "../decorators/roles.decorator";
 import { TokenBlacklistService } from "../../modules/auth/services/token-blacklist.service";
+import { CasbinService } from "../casbin/casbin.service";
+import {
+  CASBIN_RESOURCE_KEY,
+  CASBIN_ACTION_KEY,
+} from "../decorators/casbin.decorator";
 
 /**
- * Unified Authentication Guard - TEK VE DOĞRU SİSTEM
+ * Unified Authentication Guard with Casbin - TEK VE DOĞRU SİSTEM
  *
  * Tüm auth kontrollerini tek guard'da yapar:
  * - JWT authentication
  * - Public endpoint check
- * - System role hierarchy
+ * - System role hierarchy (SUPERADMIN bypass)
  * - Company isolation
- * - RBAC permissions
- * - Company roles
+ * - Casbin fine-grained permissions
+ * - Backward compatibility for existing decorators
  */
 @Injectable()
 export class UnifiedAuthGuard implements CanActivate {
@@ -35,7 +40,8 @@ export class UnifiedAuthGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private jwtService: JwtService,
-    private tokenBlacklistService: TokenBlacklistService
+    private tokenBlacklistService: TokenBlacklistService,
+    private casbinService: CasbinService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -57,20 +63,27 @@ export class UnifiedAuthGuard implements CanActivate {
       throw new UnauthorizedException("Authentication required");
     }
 
-    // 3. SYSTEM ROLE HIERARCHY CHECK
-    const systemRoleResult = this.checkSystemRoles(context, user);
-    if (!systemRoleResult) {
-      return false;
+    // 3. SYSTEM ROLE HIERARCHY CHECK (SUPERADMIN bypass)
+    const isSuperAdminOnly = this.reflector.getAllAndOverride<boolean>(
+      SUPER_ADMIN_ONLY_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (isSuperAdminOnly && user.systemRole !== SystemUserRole.SUPERADMIN) {
+      throw new ForbiddenException("Super admin access required");
     }
 
     // 4. COMPANY ISOLATION
     this.enforceCompanyIsolation(request, user);
 
-    // 5. PERMISSIONS CHECK
-    this.checkPermissions(context, user);
+    // 5. CASBIN AUTHORIZATION (Primary system)
+    const casbinResult = await this.checkCasbinPermissions(context, user);
+    if (casbinResult !== null) {
+      return casbinResult;
+    }
 
-    // 6. COMPANY ROLES CHECK
-    this.checkCompanyRoles(context, user);
+    // 6. FALLBACK TO LEGACY AUTHORIZATION (Backward compatibility)
+    await this.checkLegacyPermissions(context, user);
 
     return true;
   }
@@ -342,5 +355,104 @@ export class UnifiedAuthGuard implements CanActivate {
     this.logger.debug(
       `User ${user.sub} granted access with roles: ${user.roles?.join(", ")}`
     );
+  }
+
+  /**
+   * Primary authorization method using Casbin
+   * Returns null if no Casbin decorators found (fallback to legacy)
+   * Returns true/false if Casbin decorators present
+   */
+  private async checkCasbinPermissions(
+    context: ExecutionContext,
+    user: any
+  ): Promise<boolean | null> {
+    // Get resource and action from Casbin decorators
+    const resource = this.reflector.getAllAndOverride<string>(
+      CASBIN_RESOURCE_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    const action = this.reflector.getAllAndOverride<string>(CASBIN_ACTION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // No Casbin decorators found, fallback to legacy system
+    if (!resource || !action) {
+      return null;
+    }
+
+    // SUPERADMIN bypass for Casbin too
+    if (user.systemRole === SystemUserRole.SUPERADMIN) {
+      this.logger.debug(
+        `SUPERADMIN ${user.sub} granted Casbin access: ${action} ${resource}`
+      );
+      return true;
+    }
+
+    try {
+      // Check permission using Casbin
+      const hasPermission = await this.casbinService.enforceForCompanyUser(
+        user.companySlug,
+        user.sub,
+        resource,
+        action
+      );
+
+      if (!hasPermission) {
+        this.logger.warn(
+          `Casbin: Access denied for user ${user.sub} in company ${user.companySlug}. ` +
+            `Resource: ${resource}, Action: ${action}`
+        );
+
+        throw new ForbiddenException(
+          `Insufficient permissions to ${action} ${resource}`
+        );
+      }
+
+      this.logger.debug(
+        `Casbin: Access granted for user ${user.sub} in company ${user.companySlug}. ` +
+          `Resource: ${resource}, Action: ${action}`
+      );
+
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Casbin: Error checking permissions for user ${user.sub}:`,
+        error
+      );
+
+      throw new ForbiddenException("Permission check failed");
+    }
+  }
+
+  /**
+   * Legacy authorization system for backward compatibility
+   */
+  private async checkLegacyPermissions(
+    context: ExecutionContext,
+    user: any
+  ): Promise<void> {
+    // Check @RequireAuth decorator
+    const authRequirements = this.reflector.getAllAndMerge<AuthRequirement[]>(
+      REQUIRE_AUTH_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (authRequirements && authRequirements.length > 0) {
+      this.processAuthRequirements(authRequirements, user);
+    }
+
+    // Check @Permissions decorator
+    this.checkPermissions(context, user);
+
+    // Check @Roles decorator
+    this.checkCompanyRoles(context, user);
+
+    this.logger.debug(`Legacy authorization passed for user ${user.sub}`);
   }
 }

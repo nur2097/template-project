@@ -1,12 +1,19 @@
-import { Injectable, UnauthorizedException, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { PasswordUtil } from "../../../common/utils/password.util";
+import { PersonalInfo } from "../../../common/utils/password-policy.util";
 import { UsersService } from "../../users/users.service";
 import { RefreshTokenService } from "./refresh-token.service";
 import { DeviceService } from "./device.service";
 import { TokenBlacklistService } from "./token-blacklist.service";
 import { SanitizerUtil } from "../../../common/utils/sanitizer.util";
+import {
+  InvalidCredentialsException,
+  RefreshTokenNotFoundException,
+  AccountNotVerifiedException,
+  InvalidCompanyInvitationException,
+} from "../../../common/exceptions";
 import { CreateUserDto } from "../../users/dto/create-user.dto";
 import { UserResponseDto } from "../../users/dto/user-response.dto";
 import { LoginDto } from "../dto/login.dto";
@@ -56,6 +63,20 @@ export class AuthService {
     if (registerDto.invitationCode) {
       await this.validateInvitationCode(company.id, registerDto.invitationCode);
     }
+
+    // Validate password strength
+    const personalInfo: PersonalInfo = {
+      firstName: registerDto.firstName,
+      lastName: registerDto.lastName,
+      email: registerDto.email,
+      phoneNumber: registerDto.phoneNumber,
+    };
+
+    PasswordUtil.validatePassword(
+      registerDto.password,
+      undefined,
+      personalInfo
+    );
 
     // Create user DTO from register DTO
     const createUserDto: CreateUserDto = {
@@ -128,7 +149,7 @@ export class AuthService {
       await this.refreshTokenService.refreshAccessToken(refreshToken);
 
     if (!tokens) {
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new RefreshTokenNotFoundException();
     }
 
     const user = await this.usersService.findOne(userId);
@@ -243,17 +264,17 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException("Invalid credentials");
+      throw new InvalidCredentialsException(email);
     }
 
     if (user.status !== "ACTIVE") {
-      throw new UnauthorizedException("Account is not active");
+      throw new AccountNotVerifiedException(user.email);
     }
 
     const isPasswordValid = await PasswordUtil.compare(password, user.password);
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException("Invalid credentials");
+      throw new InvalidCredentialsException(email);
     }
 
     return user;
@@ -322,28 +343,6 @@ export class AuthService {
     }
 
     // TODO: Implement real invitation validation
-    // Example logic:
-    // const invitation = await this.prisma.invitation.findFirst({
-    //   where: {
-    //     code: invitationCode,
-    //     companyId: companyId,
-    //     expiresAt: { gt: new Date() },
-    //     used: false,
-    //   },
-    // });
-    //
-    // if (!invitation) {
-    //   throw new UnauthorizedException('Invalid or expired invitation code');
-    // }
-    //
-    // // Mark invitation as used
-    // await this.prisma.invitation.update({
-    //   where: { id: invitation.id },
-    //   data: { used: true, usedAt: new Date() },
-    // });
-
-    throw new UnauthorizedException(
-      "Invitation code validation not implemented yet"
-    );
+    throw new InvalidCompanyInvitationException(invitationCode);
   }
 }

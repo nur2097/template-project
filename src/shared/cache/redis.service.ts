@@ -1,9 +1,15 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
   private client: Redis;
 
   constructor(private readonly configService: ConfigService) {}
@@ -18,17 +24,40 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.client.on("error", (err) => {
-      console.error("Redis connection error:", err);
+      this.logger.error("❌ Redis connection error:", err);
     });
 
     this.client.on("connect", () => {
-      console.log("Redis connected successfully");
+      this.logger.log("✅ Connected to Redis successfully");
+    });
+
+    this.client.on("ready", () => {
+      this.logger.log("🚀 Redis is ready to accept commands");
+    });
+
+    this.client.on("close", () => {
+      this.logger.warn("🔌 Redis connection closed");
     });
   }
 
   async onModuleDestroy() {
     if (this.client) {
-      await this.client.quit();
+      try {
+        await this.client.quit();
+        this.logger.log("🔌 Redis connection closed gracefully");
+      } catch (error) {
+        this.logger.error("❌ Error closing Redis connection:", error);
+      }
+    }
+  }
+
+  // Health check method
+  async isHealthy(): Promise<boolean> {
+    try {
+      await this.client.ping();
+      return true;
+    } catch {
+      return false;
     }
   }
 

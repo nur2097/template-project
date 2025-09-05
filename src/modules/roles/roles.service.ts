@@ -3,6 +3,7 @@ import {
   NotFoundException,
   Logger,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../../shared/database/prisma.service";
 import { AuthService } from "../auth/services/auth.service";
@@ -272,29 +273,60 @@ export class RolesService {
   // ================================
 
   /**
-   * Get all permissions for a company with pagination
+   * Get all permissions for a company with pagination and filtering
    */
   async findAllPermissions(
     companyId: number,
     page: number = 1,
-    limit: number = 10
+    limit: number = 10,
+    filters?: {
+      search?: string;
+      resource?: string;
+      action?: string;
+    }
   ) {
     const skip = (page - 1) * limit;
+    const where: any = { companyId };
+
+    // Apply filters
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: "insensitive" } },
+        { description: { contains: filters.search, mode: "insensitive" } },
+      ];
+    }
+
+    if (filters?.resource) {
+      where.resource = filters.resource;
+    }
+
+    if (filters?.action) {
+      where.action = filters.action;
+    }
 
     const [permissions, total] = await Promise.all([
       this.prisma.permission.findMany({
-        where: { companyId },
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
+        include: {
+          _count: {
+            select: {
+              roles: true,
+            },
+          },
+        },
       }),
-      this.prisma.permission.count({
-        where: { companyId },
-      }),
+      this.prisma.permission.count({ where }),
     ]);
 
     return {
-      data: permissions,
+      data: permissions.map((permission) => ({
+        ...permission,
+        rolesCount: permission._count.roles,
+        usersCount: 0, // Will be calculated if needed
+      })),
       pagination: {
         page,
         limit,
@@ -305,11 +337,35 @@ export class RolesService {
   }
 
   /**
-   * Get a single permission by ID
+   * Get a single permission by ID with optional usage details
    */
-  async findOnePermission(permissionId: number, companyId: number) {
+  async findOnePermission(
+    permissionId: number,
+    companyId: number,
+    includeUsage: boolean = false
+  ) {
     const permission = await this.prisma.permission.findFirst({
       where: { id: permissionId, companyId },
+      include: {
+        _count: {
+          select: {
+            roles: true,
+          },
+        },
+        ...(includeUsage && {
+          roles: {
+            include: {
+              role: {
+                include: {
+                  _count: {
+                    select: { users: true },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      },
     });
 
     if (!permission) {
@@ -318,7 +374,19 @@ export class RolesService {
       );
     }
 
-    return permission;
+    let usersCount = 0;
+    if (includeUsage && permission.roles) {
+      usersCount = permission.roles.reduce(
+        (sum, rp: any) => sum + rp.role._count.users,
+        0
+      );
+    }
+
+    return {
+      ...permission,
+      rolesCount: permission._count.roles,
+      usersCount,
+    };
   }
 
   /**
@@ -436,14 +504,15 @@ export class RolesService {
   }
 
   /**
-   * Delete a permission
+   * Delete a permission with force option
    */
   async deletePermission(
     permissionId: number,
-    companyId: number
+    companyId: number,
+    force: boolean = false
   ): Promise<void> {
     this.logger.log(
-      `Deleting permission ${permissionId} from company ${companyId}`
+      `Deleting permission ${permissionId} from company ${companyId} (force: ${force})`
     );
 
     // Check if permission exists and get affected users
@@ -465,6 +534,13 @@ export class RolesService {
     if (!permission) {
       throw new NotFoundException(
         `Permission with ID ${permissionId} not found in company ${companyId}`
+      );
+    }
+
+    // Check if permission is assigned to roles
+    if (permission.roles.length > 0 && !force) {
+      throw new BadRequestException(
+        `Cannot delete permission that is assigned to ${permission.roles.length} role(s). Use force=true to delete anyway.`
       );
     }
 
@@ -683,5 +759,243 @@ export class RolesService {
         `Permission ${permissionId} removed from role ${roleId}, no users affected`
       );
     }
+  }
+
+  // ================================
+  // ENHANCED PERMISSION METHODS
+  // ================================
+
+  /**
+   * Get unique permission resources
+   */
+  async getPermissionResources(companyId: number) {
+    const resources = await this.prisma.permission.findMany({
+      where: { companyId },
+      select: { resource: true },
+      distinct: ["resource"],
+      orderBy: { resource: "asc" },
+    });
+
+    return {
+      resources: resources.map((p) => p.resource),
+    };
+  }
+
+  /**
+   * Get unique permission actions
+   */
+  async getPermissionActions(companyId: number) {
+    const actions = await this.prisma.permission.findMany({
+      where: { companyId },
+      select: { action: true },
+      distinct: ["action"],
+      orderBy: { action: "asc" },
+    });
+
+    return {
+      actions: actions.map((p) => p.action),
+    };
+  }
+
+  /**
+   * Get permissions grouped by categories (resources)
+   */
+  async getPermissionCategories(companyId: number) {
+    const permissions = await this.prisma.permission.findMany({
+      where: { companyId },
+      orderBy: [{ resource: "asc" }, { name: "asc" }],
+    });
+
+    const categories = permissions.reduce(
+      (acc, permission) => {
+        if (!acc[permission.resource]) {
+          acc[permission.resource] = [];
+        }
+        acc[permission.resource].push(permission);
+        return acc;
+      },
+      {} as Record<string, any[]>
+    );
+
+    return { categories };
+  }
+
+  /**
+   * Get permission statistics
+   */
+  async getPermissionStats(companyId: number) {
+    const [total, byResource, byAction, permissionsWithUsage] =
+      await Promise.all([
+        this.prisma.permission.count({ where: { companyId } }),
+        this.prisma.permission.groupBy({
+          by: ["resource"],
+          where: { companyId },
+          _count: { resource: true },
+        }),
+        this.prisma.permission.groupBy({
+          by: ["action"],
+          where: { companyId },
+          _count: { action: true },
+        }),
+        this.prisma.permission.findMany({
+          where: { companyId },
+          include: {
+            _count: {
+              select: { roles: true },
+            },
+          },
+          orderBy: {
+            roles: {
+              _count: "desc",
+            },
+          },
+        }),
+      ]);
+
+    const byResourceMap = byResource.reduce(
+      (acc, item) => {
+        acc[item.resource] = item._count.resource;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
+    const byActionMap = byAction.reduce(
+      (acc, item) => {
+        acc[item.action] = item._count.action;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
+    return {
+      total,
+      byResource: byResourceMap,
+      byAction: byActionMap,
+      mostUsed: permissionsWithUsage.slice(0, 10),
+      leastUsed: permissionsWithUsage.slice(-10).reverse(),
+    };
+  }
+
+  /**
+   * Create multiple permissions
+   */
+  async createBulkPermissions(
+    permissions: Array<{
+      name: string;
+      description?: string;
+      resource: string;
+      action: string;
+    }>,
+    companyId: number
+  ) {
+    const success: any[] = [];
+    const failed: Array<{ permission: any; reason: string }> = [];
+
+    for (const permissionData of permissions) {
+      try {
+        const permission = await this.createPermission(
+          permissionData,
+          companyId
+        );
+        success.push(permission);
+      } catch (error) {
+        failed.push({
+          permission: permissionData,
+          reason: error.message || "Unknown error occurred",
+        });
+      }
+    }
+
+    return { success, failed };
+  }
+
+  /**
+   * Clone permission
+   */
+  async clonePermission(
+    permissionId: number,
+    cloneData: { name: string; description?: string },
+    companyId: number
+  ) {
+    // Get original permission
+    const originalPermission = await this.prisma.permission.findFirst({
+      where: { id: permissionId, companyId },
+    });
+
+    if (!originalPermission) {
+      throw new NotFoundException(
+        `Permission with ID ${permissionId} not found in company ${companyId}`
+      );
+    }
+
+    // Create cloned permission
+    return this.createPermission(
+      {
+        name: cloneData.name,
+        description:
+          cloneData.description || `Clone of ${originalPermission.description}`,
+        resource: originalPermission.resource,
+        action: originalPermission.action,
+      },
+      companyId
+    );
+  }
+
+  /**
+   * Get permission usage details
+   */
+  async getPermissionUsage(permissionId: number, companyId: number) {
+    const permission = await this.prisma.permission.findFirst({
+      where: { id: permissionId, companyId },
+      include: {
+        roles: {
+          include: {
+            role: {
+              select: {
+                id: true,
+                name: true,
+                _count: {
+                  select: { users: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!permission) {
+      throw new NotFoundException(
+        `Permission with ID ${permissionId} not found in company ${companyId}`
+      );
+    }
+
+    const roles = permission.roles.map((rp) => ({
+      id: rp.role.id,
+      name: rp.role.name,
+      usersCount: rp.role._count.users,
+    }));
+
+    const totalUsers = roles.reduce((sum, role) => sum + role.usersCount, 0);
+
+    return {
+      roles,
+      totalUsers,
+      isSystemPermission: this.isSystemPermission(permission.name),
+    };
+  }
+
+  private isSystemPermission(permissionName: string): boolean {
+    const systemPermissions = [
+      "users.read",
+      "users.write",
+      "users.delete",
+      "roles.read",
+      "roles.write",
+      "company.read",
+      "company.write",
+    ];
+    return systemPermissions.includes(permissionName);
   }
 }

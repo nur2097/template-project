@@ -7,6 +7,8 @@ import {
 } from "@nestjs/common";
 import { Observable, tap, catchError } from "rxjs";
 import { LoggerService } from "../logger/logger.service";
+import { SanitizerUtil } from "../utils/sanitizer.util";
+import { getCorrelationContext } from "./correlation.interceptor";
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -22,20 +24,27 @@ export class LoggingInterceptor implements NestInterceptor {
     const url = req.url;
     const userAgent = req.get("User-Agent") || "";
     const ip = req.ip || req.socket.remoteAddress;
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.sub;
+
+    // Get correlation context
+    const correlationContext = getCorrelationContext();
+    const correlationId =
+      correlationContext?.correlationId || req.correlationId;
+    const requestId = correlationContext?.requestId || req.requestId;
 
     const startTime = Date.now();
 
-    // Log request
+    // Log request with sensitive data masked
     this.loggerService
       .logRequest({
         method,
         url,
-        headers: req.headers,
-        body: req.body,
+        headers: SanitizerUtil.sanitizeHeaders(req.headers),
+        body: SanitizerUtil.sanitizeBody(req.body),
         userAgent,
         ip,
         userId,
+        correlationId,
       })
       .catch((err) => this.logger.error("Failed to log request", err.stack));
 
@@ -52,6 +61,7 @@ export class LoggingInterceptor implements NestInterceptor {
             statusCode,
             responseTime,
             userId,
+            correlationId,
           })
           .catch((err) =>
             this.logger.error("Failed to log response", err.stack)
@@ -62,14 +72,22 @@ export class LoggingInterceptor implements NestInterceptor {
           .logPerformance({
             operation: `${method} ${url}`,
             duration: responseTime,
-            metadata: { context: "HTTP_REQUEST", statusCode, userId },
+            correlationId,
+            metadata: {
+              context: "HTTP_REQUEST",
+              statusCode,
+              userId,
+              requestId,
+            },
           })
           .catch((err) =>
             this.logger.error("Failed to log performance", err.stack)
           );
 
-        // Console log for development
-        this.logger.log(`${method} ${url} ${statusCode} ${responseTime}ms`);
+        // Console log for development with correlation ID
+        this.logger.log(
+          `${method} ${url} ${statusCode} ${responseTime}ms [${correlationId}]`
+        );
       }),
       catchError((error) => {
         const responseTime = Date.now() - startTime;
@@ -80,12 +98,13 @@ export class LoggingInterceptor implements NestInterceptor {
             `HTTP Error: ${method} ${url}`,
             error.stack,
             "HTTP_REQUEST",
-            userId
+            userId,
+            { correlationId, requestId, statusCode: error.status || 500 }
           )
           .catch((err) => this.logger.error("Failed to log error", err.stack));
 
         this.logger.error(
-          `${method} ${url} ERROR ${responseTime}ms - ${error.message}`
+          `${method} ${url} ERROR ${responseTime}ms - ${error.message} [${correlationId}]`
         );
         throw error;
       })

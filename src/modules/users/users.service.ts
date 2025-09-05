@@ -12,6 +12,7 @@ enum UserStatus {
 }
 
 import { PasswordUtil } from "../../common/utils/password.util";
+import { PersonalInfo } from "../../common/utils/password-policy.util";
 import { PrismaService } from "../../shared/database/prisma.service";
 import { CacheService } from "../../shared/cache/cache.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -96,6 +97,20 @@ export class UsersService implements IUsersService {
   ): Promise<UserResponseDto> {
     this.logger.debug(`Creating user with email: ${createUserDto.email}`);
 
+    // Validate password strength
+    const personalInfo: PersonalInfo = {
+      firstName: createUserDto.firstName,
+      lastName: createUserDto.lastName,
+      email: createUserDto.email,
+      phoneNumber: createUserDto.phoneNumber,
+    };
+
+    PasswordUtil.validatePassword(
+      createUserDto.password,
+      undefined,
+      personalInfo
+    );
+
     const hashedPassword = await PasswordUtil.hash(createUserDto.password);
 
     try {
@@ -130,13 +145,66 @@ export class UsersService implements IUsersService {
   async findAll(
     page = 1,
     limit = 10,
-    companyId?: number
+    companyId?: number,
+    filters?: {
+      search?: string;
+      status?: string;
+      systemRole?: string;
+      emailVerified?: boolean;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+    }
   ): Promise<{
     data: UserResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
     const skip = (page - 1) * limit;
-    const where = companyId ? { companyId } : {};
+    const where: any = companyId
+      ? { companyId, deletedAt: null }
+      : { deletedAt: null };
+
+    // Apply filters
+    if (filters?.search) {
+      where.OR = [
+        { firstName: { contains: filters.search, mode: "insensitive" } },
+        { lastName: { contains: filters.search, mode: "insensitive" } },
+        { email: { contains: filters.search, mode: "insensitive" } },
+      ];
+    }
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.systemRole) {
+      where.systemRole = filters.systemRole;
+    }
+
+    if (filters?.emailVerified !== undefined) {
+      where.emailVerified = filters.emailVerified;
+    }
+
+    // Apply sorting
+    let orderBy: any = { createdAt: "desc" };
+    if (filters?.sortBy) {
+      const sortOrder = filters.sortOrder || "asc";
+      switch (filters.sortBy) {
+        case "name":
+          orderBy = { firstName: sortOrder };
+          break;
+        case "email":
+          orderBy = { email: sortOrder };
+          break;
+        case "lastLogin":
+          orderBy = { lastLoginAt: sortOrder };
+          break;
+        case "created":
+          orderBy = { createdAt: sortOrder };
+          break;
+        default:
+          orderBy = { createdAt: "desc" };
+      }
+    }
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -160,7 +228,7 @@ export class UsersService implements IUsersService {
           updatedAt: true,
           deletedAt: true,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy,
       }),
       this.prisma.user.count({ where }),
     ]);
@@ -284,6 +352,19 @@ export class UsersService implements IUsersService {
 
     const updateData = { ...updateUserDto };
     if (updateUserDto.password) {
+      // Validate password strength if being updated
+      const personalInfo: PersonalInfo = {
+        firstName: updateUserDto.firstName || existingUser.firstName,
+        lastName: updateUserDto.lastName || existingUser.lastName,
+        email: updateUserDto.email || existingUser.email,
+        phoneNumber: updateUserDto.phoneNumber || existingUser.phoneNumber,
+      };
+
+      PasswordUtil.validatePassword(
+        updateUserDto.password,
+        undefined,
+        personalInfo
+      );
       updateData.password = await PasswordUtil.hash(updateUserDto.password);
     }
 

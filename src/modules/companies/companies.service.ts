@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  ConflictException,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../shared/database/prisma.service";
 import { CacheService } from "../../shared/cache/cache.service";
 import { CreateCompanyDto } from "./dto/create-company.dto";
@@ -12,8 +6,14 @@ import { RegisterCompanyDto } from "./dto/register-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyResponseDto } from "./dto/company-response.dto";
 import { SystemUserRole } from "@prisma/client";
-import * as bcrypt from "bcrypt";
 import { ValidationUtil } from "../../common/utils";
+import { PasswordUtil } from "../../common/utils/password.util";
+import {
+  EntityNotFoundException,
+  EntityAlreadyExistsException,
+  InvalidDomainException,
+  DataIntegrityException,
+} from "../../common/exceptions";
 
 @Injectable()
 export class CompaniesService {
@@ -23,6 +23,61 @@ export class CompaniesService {
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService
   ) {}
+
+  async create(
+    createCompanyDto: CreateCompanyDto
+  ): Promise<CompanyResponseDto> {
+    this.logger.debug(`Creating company: ${createCompanyDto.name}`);
+
+    // Check if company with slug already exists
+    const existingCompany = await this.prisma.company.findUnique({
+      where: { slug: createCompanyDto.slug },
+    });
+
+    if (existingCompany) {
+      throw new EntityAlreadyExistsException(
+        "Company",
+        "slug",
+        createCompanyDto.slug,
+        existingCompany.id
+      );
+    }
+
+    // Check if domain is already used (if provided)
+    if (createCompanyDto.domain) {
+      if (!ValidationUtil.isValidDomain(createCompanyDto.domain)) {
+        throw new InvalidDomainException(createCompanyDto.domain);
+      }
+
+      const existingDomain = await this.prisma.company.findUnique({
+        where: { domain: createCompanyDto.domain },
+      });
+
+      if (existingDomain) {
+        throw new EntityAlreadyExistsException(
+          "Company",
+          "domain",
+          createCompanyDto.domain,
+          existingDomain.id
+        );
+      }
+    }
+
+    try {
+      const company = await this.prisma.company.create({
+        data: createCompanyDto,
+      });
+
+      this.logger.log(
+        `Company created successfully: ${company.name} (ID: ${company.id})`
+      );
+
+      return this.transformToCompanyResponse(company);
+    } catch (error) {
+      this.logger.error(`Failed to create company: ${error.message}`);
+      throw error;
+    }
+  }
 
   async registerCompany(registerCompanyDto: RegisterCompanyDto): Promise<{
     company: CompanyResponseDto;
@@ -36,13 +91,18 @@ export class CompaniesService {
     });
 
     if (existingCompany) {
-      throw new ConflictException("Company with this slug already exists");
+      throw new EntityAlreadyExistsException(
+        "Company",
+        "slug",
+        registerCompanyDto.slug,
+        existingCompany.id
+      );
     }
 
     // Check if domain is already used (if provided)
     if (registerCompanyDto.domain) {
       if (!ValidationUtil.isValidDomain(registerCompanyDto.domain)) {
-        throw new BadRequestException("Invalid domain format");
+        throw new InvalidDomainException(registerCompanyDto.domain);
       }
 
       const existingDomain = await this.prisma.company.findUnique({
@@ -50,7 +110,12 @@ export class CompaniesService {
       });
 
       if (existingDomain) {
-        throw new ConflictException("Company with this domain already exists");
+        throw new EntityAlreadyExistsException(
+          "Company",
+          "domain",
+          registerCompanyDto.domain,
+          existingDomain.id
+        );
       }
     }
 
@@ -60,8 +125,20 @@ export class CompaniesService {
     });
 
     if (existingUser) {
-      throw new ConflictException("User with this email already exists");
+      throw new EntityAlreadyExistsException(
+        "User",
+        "email",
+        registerCompanyDto.adminEmail,
+        existingUser.id
+      );
     }
+
+    // Validate admin password strength
+    PasswordUtil.validatePassword(registerCompanyDto.adminPassword, undefined, {
+      firstName: registerCompanyDto.adminFirstName,
+      lastName: registerCompanyDto.adminLastName,
+      email: registerCompanyDto.adminEmail,
+    });
 
     // Use transaction to ensure data consistency
     try {
@@ -82,11 +159,9 @@ export class CompaniesService {
           },
         });
 
-        // Hash admin password
-        const saltRounds = 12;
-        const hashedPassword = await bcrypt.hash(
-          registerCompanyDto.adminPassword,
-          saltRounds
+        // Hash admin password using PasswordUtil
+        const hashedPassword = await PasswordUtil.hash(
+          registerCompanyDto.adminPassword
         );
 
         // Create admin user
@@ -213,71 +288,7 @@ export class CompaniesService {
       };
     } catch (error) {
       this.logger.error(`Failed to register company: ${error.message}`);
-      throw new BadRequestException("Failed to register company");
-    }
-  }
-
-  async create(
-    createCompanyDto: CreateCompanyDto,
-    creatorUserId?: number
-  ): Promise<CompanyResponseDto> {
-    this.logger.debug(`Creating company: ${createCompanyDto.name}`);
-
-    // Check if company with slug already exists
-    const existingCompany = await this.prisma.company.findUnique({
-      where: { slug: createCompanyDto.slug },
-    });
-
-    if (existingCompany) {
-      throw new ConflictException("Company with this slug already exists");
-    }
-
-    // Check if domain is already used (if provided)
-    if (createCompanyDto.domain) {
-      if (!ValidationUtil.isValidDomain(createCompanyDto.domain)) {
-        throw new BadRequestException("Invalid domain format");
-      }
-
-      const existingDomain = await this.prisma.company.findUnique({
-        where: { domain: createCompanyDto.domain },
-      });
-
-      if (existingDomain) {
-        throw new ConflictException("Company with this domain already exists");
-      }
-    }
-
-    try {
-      const company = await this.prisma.company.create({
-        data: {
-          name: createCompanyDto.name,
-          slug: createCompanyDto.slug,
-          domain: createCompanyDto.domain,
-          settings: createCompanyDto.settings || {},
-          status: "ACTIVE",
-        },
-        include: {
-          _count: {
-            select: { users: true },
-          },
-        },
-      });
-
-      // If creatorUserId is provided, update user's company
-      if (creatorUserId) {
-        await this.prisma.user.update({
-          where: { id: creatorUserId },
-          data: { companyId: company.id },
-        });
-
-        // Invalidate user cache
-        await this.cacheService.invalidateUserCache(creatorUserId);
-      }
-
-      return this.transformToCompanyResponse(company);
-    } catch (error) {
-      this.logger.error(`Failed to create company: ${error.message}`);
-      throw new BadRequestException("Failed to create company");
+      throw new DataIntegrityException("company registration", error.message);
     }
   }
 
@@ -325,7 +336,7 @@ export class CompaniesService {
     });
 
     if (!company) {
-      throw new NotFoundException(`Company with ID ${id} not found`);
+      throw new EntityNotFoundException("Company", id.toString());
     }
 
     return this.transformToCompanyResponse(company);
@@ -342,7 +353,7 @@ export class CompaniesService {
     });
 
     if (!company) {
-      throw new NotFoundException(`Company with slug ${slug} not found`);
+      throw new EntityNotFoundException("Company", slug);
     }
 
     return this.transformToCompanyResponse(company);
@@ -359,7 +370,7 @@ export class CompaniesService {
     });
 
     if (!company) {
-      throw new NotFoundException(`Company with domain ${domain} not found`);
+      throw new EntityNotFoundException("Company", domain);
     }
 
     return this.transformToCompanyResponse(company);
@@ -374,7 +385,7 @@ export class CompaniesService {
     });
 
     if (!existingCompany) {
-      throw new NotFoundException(`Company with ID ${id} not found`);
+      throw new EntityNotFoundException("Company", id.toString());
     }
 
     // Check slug uniqueness if being updated
@@ -387,7 +398,12 @@ export class CompaniesService {
       });
 
       if (slugExists) {
-        throw new ConflictException("Company with this slug already exists");
+        throw new EntityAlreadyExistsException(
+          "Company",
+          "slug",
+          updateCompanyDto.slug,
+          slugExists.id
+        );
       }
     }
 
@@ -397,7 +413,7 @@ export class CompaniesService {
       updateCompanyDto.domain !== existingCompany.domain
     ) {
       if (!ValidationUtil.isValidDomain(updateCompanyDto.domain)) {
-        throw new BadRequestException("Invalid domain format");
+        throw new InvalidDomainException(updateCompanyDto.domain);
       }
 
       const domainExists = await this.prisma.company.findUnique({
@@ -405,7 +421,12 @@ export class CompaniesService {
       });
 
       if (domainExists) {
-        throw new ConflictException("Company with this domain already exists");
+        throw new EntityAlreadyExistsException(
+          "Company",
+          "domain",
+          updateCompanyDto.domain,
+          domainExists.id
+        );
       }
     }
 
@@ -426,7 +447,7 @@ export class CompaniesService {
       return this.transformToCompanyResponse(updatedCompany);
     } catch (error) {
       this.logger.error(`Failed to update company ${id}: ${error.message}`);
-      throw new BadRequestException("Failed to update company");
+      throw new DataIntegrityException("company update", error.message);
     }
   }
 
@@ -441,11 +462,12 @@ export class CompaniesService {
     });
 
     if (!company) {
-      throw new NotFoundException(`Company with ID ${id} not found`);
+      throw new EntityNotFoundException("Company", id.toString());
     }
 
     if (company._count.users > 0) {
-      throw new BadRequestException(
+      throw new DataIntegrityException(
+        "company deletion",
         "Cannot delete company with existing users"
       );
     }
@@ -459,7 +481,7 @@ export class CompaniesService {
       await this.cacheService.invalidateCompanyCache(id);
     } catch (error) {
       this.logger.error(`Failed to delete company ${id}: ${error.message}`);
-      throw new BadRequestException("Failed to delete company");
+      throw new DataIntegrityException("company deletion", error.message);
     }
   }
 

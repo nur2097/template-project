@@ -1,0 +1,46 @@
+# Company-based RBAC policies
+# Format: p, company:role, resource, action
+
+# Example company policies (will be loaded dynamically from database)
+# These are examples - real policies come from database via CasbinService.loadPoliciesFromDatabase()
+
+# Admin role permissions (full access)
+p, admin, users, create
+p, admin, users, read
+p, admin, users, update
+p, admin, users, delete
+p, admin, companies, read
+p, admin, companies, update
+p, admin, roles, create
+p, admin, roles, read
+p, admin, roles, update
+p, admin, roles, delete
+p, admin, permissions, create
+p, admin, permissions, read
+p, admin, permissions, update
+p, admin, permissions, delete
+p, admin, upload, create
+p, admin, upload, read
+p, admin, health, read
+
+# Manager role permissions (limited admin access)
+p, manager, users, read
+p, manager, users, update
+p, manager, companies, read
+p, manager, roles, read
+p, manager, permissions, read
+p, manager, upload, create
+p, manager, upload, read
+
+# Employee role permissions (basic access)
+p, employee, users, read
+p, employee, companies, read
+p, employee, upload, create
+p, employee, upload, read
+
+# Example user-role assignments (company-scoped)
+# Format: g, company:userId, company:role
+# These are examples - real assignments come from database
+
+# Note: In production, these policies are loaded from database
+# See: CasbinService.loadPoliciesFromDatabase() method

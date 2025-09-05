@@ -1,10 +1,12 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { RedisService } from "./redis.service";
 
 @Injectable()
 export class CacheService {
+  private readonly logger = new Logger(CacheService.name);
+
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly redisService: RedisService
@@ -14,7 +16,7 @@ export class CacheService {
     try {
       return await this.cacheManager.get<T>(key);
     } catch (error) {
-      console.error(`Cache get error for key ${key}:`, error);
+      this.logger.error(`Cache get error for key ${key}:`, error);
       return null;
     }
   }
@@ -27,7 +29,7 @@ export class CacheService {
         await this.cacheManager.set(key, value);
       }
     } catch (error) {
-      console.error(`Cache set error for key ${key}:`, error);
+      this.logger.error(`Cache set error for key ${key}:`, error);
     }
   }
 
@@ -35,7 +37,7 @@ export class CacheService {
     try {
       await this.cacheManager.del(key);
     } catch (error) {
-      console.error(`Cache delete error for key ${key}:`, error);
+      this.logger.error(`Cache delete error for key ${key}:`, error);
     }
   }
 
@@ -43,7 +45,7 @@ export class CacheService {
     try {
       await this.cacheManager.reset();
     } catch (error) {
-      console.error("Cache reset error:", error);
+      this.logger.error("Cache reset error:", error);
     }
   }
 
@@ -55,7 +57,7 @@ export class CacheService {
         ttl ? ttl * 1000 : undefined
       );
     } catch (error) {
-      console.error(`Cache wrap error for key ${key}:`, error);
+      this.logger.error(`Cache wrap error for key ${key}:`, error);
       // Fallback to direct function execution
       return await fn();
     }
@@ -82,7 +84,10 @@ export class CacheService {
         await pipeline.exec();
       }
     } catch (error) {
-      console.error(`Cache invalidate pattern error for ${pattern}:`, error);
+      this.logger.error(
+        `Cache invalidate pattern error for ${pattern}:`,
+        error
+      );
     }
   }
 

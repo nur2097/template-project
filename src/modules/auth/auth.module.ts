@@ -5,6 +5,7 @@ import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { RefreshTokenService } from "./services/refresh-token.service";
 import { PasswordResetService } from "./services/password-reset.service";
+import { EmailVerificationService } from "./services/email-verification.service";
 import { DeviceService } from "./services/device.service";
 import { UsersModule } from "../users/users.module";
 import { CompaniesModule } from "../companies/companies.module";
@@ -27,6 +28,7 @@ import { TokenBlacklistService } from "./services/token-blacklist.service";
     JwtStrategy,
     RefreshTokenService,
     PasswordResetService,
+    EmailVerificationService,
     DeviceService,
     TokenBlacklistService,
   ],
@@ -35,6 +37,7 @@ import { TokenBlacklistService } from "./services/token-blacklist.service";
     AuthService,
     RefreshTokenService,
     PasswordResetService,
+    EmailVerificationService,
     DeviceService,
     TokenBlacklistService,
   ],

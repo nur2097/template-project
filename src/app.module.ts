@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
+import { ConfigurationModule, ConfigurationService } from "./config";
 import { BullModule } from "@nestjs/bull";
 import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from "@nestjs/core";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -17,40 +17,33 @@ import { QueueModule } from "./queue/queue.module";
 import { DatabaseModule } from "./shared/database/database.module";
 import { CacheModule } from "./shared/cache/cache.module";
 import { TracingModule } from "./common/tracing/tracing.module";
+import { CasbinModule } from "./common/casbin/casbin.module";
 import { GlobalExceptionFilter } from "./common/filters/http-exception.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { CorrelationInterceptor } from "./common/interceptors/correlation.interceptor";
 import { PerformanceInterceptor } from "./common/interceptors/performance.interceptor";
 import { TracingInterceptor } from "./common/interceptors/tracing.interceptor";
+import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: [".env.development", ".env"],
-    }),
+    ConfigurationModule,
     JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get("JWT_SECRET") || "dev-jwt-secret",
-        signOptions: { expiresIn: config.get("JWT_EXPIRES_IN") || "1d" },
-      }),
+      imports: [ConfigurationModule],
+      inject: [ConfigurationService],
+      useFactory: (config: ConfigurationService) => config.jwtConfig,
       global: true,
     }),
     BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: {
-          host: config.get("REDIS_HOST") || "localhost",
-          port: parseInt(config.get("REDIS_PORT")) || 6379,
-          password: config.get("REDIS_PASSWORD"),
-        },
+      imports: [ConfigurationModule],
+      inject: [ConfigurationService],
+      useFactory: (config: ConfigurationService) => ({
+        redis: config.redisConfig,
       }),
     }),
     TracingModule,
+    CasbinModule,
     SecurityModule,
     DatabaseModule,
     CacheModule,
@@ -85,6 +78,10 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
     {
       provide: APP_INTERCEPTOR,
       useClass: TracingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ResponseInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

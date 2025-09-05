@@ -17,6 +17,11 @@ import {
   ApiConsumes,
 } from "@nestjs/swagger";
 import {
+  CanUpload,
+  CanReadFiles,
+} from "../../common/decorators/casbin.decorator";
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import {
   UploadService,
   UploadedFile as CustomUploadedFile,
 } from "./upload.service";
@@ -28,6 +33,7 @@ export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post("single")
+  @CanUpload()
   @ApiOperation({ summary: "Upload single file" })
   @ApiResponse({ status: 200, description: "File uploaded successfully" })
   @ApiResponse({ status: 400, description: "Invalid file" })
@@ -60,6 +66,7 @@ export class UploadController {
   }
 
   @Post("multiple")
+  @CanUpload()
   @ApiOperation({ summary: "Upload multiple files" })
   @ApiResponse({ status: 200, description: "Files uploaded successfully" })
   @ApiResponse({ status: 400, description: "Invalid files" })
@@ -93,12 +100,16 @@ export class UploadController {
   }
 
   @Post("avatar")
+  @CanUpload()
   @ApiOperation({ summary: "Upload user avatar" })
   @ApiResponse({ status: 200, description: "Avatar uploaded successfully" })
   @ApiResponse({ status: 400, description: "Invalid image file" })
   @ApiConsumes("multipart/form-data")
   @UseInterceptors(FileInterceptor("avatar"))
-  async uploadAvatar(@UploadedFile() file: Express.Multer.File) {
+  async uploadAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser("id") userId: number
+  ) {
     if (!file) {
       throw new BadRequestException("No avatar file provided");
     }
@@ -112,11 +123,10 @@ export class UploadController {
       size: file.size,
     };
 
-    // For demo purposes, using a dummy user ID
-    // In real implementation, extract user ID from JWT token
-    const userId = "user-123";
-
-    const result = await this.uploadService.uploadAvatar(uploadedFile, userId);
+    const result = await this.uploadService.uploadAvatar(
+      uploadedFile,
+      userId.toString()
+    );
 
     if (!result.success) {
       throw new BadRequestException(result.error);
@@ -129,6 +139,7 @@ export class UploadController {
   }
 
   @Get("info/:folder/:filename")
+  @CanReadFiles()
   @ApiOperation({ summary: "Get file information" })
   @ApiResponse({ status: 200, description: "File information retrieved" })
   @ApiResponse({ status: 404, description: "File not found" })
@@ -154,6 +165,7 @@ export class UploadController {
   }
 
   @Get("config")
+  @CanReadFiles()
   @ApiOperation({ summary: "Get upload configuration" })
   @ApiResponse({ status: 200, description: "Upload configuration retrieved" })
   async getUploadConfig() {

@@ -204,7 +204,6 @@ model PasswordReset {
   @@map("password_resets")
 }
 
-
 // API Keys/Tokens Model
 model ApiKey {
   id          Int       @id @default(autoincrement())
@@ -236,6 +235,7 @@ model UserSession {
 
   @@map("user_sessions")
 }
+
 
 // Rate Limiting Model
 model RateLimit {

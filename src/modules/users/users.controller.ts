@@ -19,7 +19,12 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from "@nestjs/swagger";
-import { RequireAuth } from "../../common/decorators/require-auth.decorator";
+import {
+  CanReadUsers,
+  CanCreateUsers,
+  CanUpdateUsers,
+  CanDeleteUsers,
+} from "../../common/decorators/casbin.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CacheKey, CacheTTL } from "../../common/decorators/cache.decorator";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -34,7 +39,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @RequireAuth("users.read")
+  @CanReadUsers()
   @ApiOperation({ summary: "Get all users with pagination" })
   @ApiResponse({
     status: 200,
@@ -53,19 +58,70 @@ export class UsersController {
     type: Number,
     description: "Items per page",
   })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    type: String,
+    description: "Search by name or email",
+  })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    type: String,
+    description: "Filter by user status (ACTIVE, INACTIVE, SUSPENDED)",
+  })
+  @ApiQuery({
+    name: "systemRole",
+    required: false,
+    type: String,
+    description: "Filter by system role",
+  })
+  @ApiQuery({
+    name: "emailVerified",
+    required: false,
+    type: Boolean,
+    description: "Filter by email verification status",
+  })
+  @ApiQuery({
+    name: "sortBy",
+    required: false,
+    type: String,
+    description: "Sort by field (name, email, lastLogin, created)",
+  })
+  @ApiQuery({
+    name: "sortOrder",
+    required: false,
+    type: String,
+    description: "Sort order (asc, desc)",
+  })
   async findAll(
+    @CurrentUser("companyId") companyId: number,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @CurrentUser("companyId") companyId: number
+    @Query("search") search?: string,
+    @Query("status") status?: string,
+    @Query("systemRole") systemRole?: string,
+    @Query("emailVerified") emailVerified?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc"
   ) {
-    return this.usersService.findAll(page, limit, companyId);
+    const filters = {
+      search,
+      status,
+      systemRole,
+      emailVerified: emailVerified ? emailVerified === "true" : undefined,
+      sortBy,
+      sortOrder,
+    };
+
+    return this.usersService.findAll(page, limit, companyId, filters);
   }
 
   @Get("stats")
   @UseInterceptors(CacheInterceptor)
   @CacheKey("users:stats:{companyId}")
   @CacheTTL(300) // 5 minutes
-  @RequireAuth("users.read")
+  @CanReadUsers()
   @ApiOperation({ summary: "Get user statistics" })
   @ApiResponse({ status: 200, description: "User statistics retrieved" })
   async getStats(@CurrentUser("companyId") companyId: number) {
@@ -76,7 +132,7 @@ export class UsersController {
   @UseInterceptors(CacheInterceptor)
   @CacheKey("user:{params.id}:{companyId}")
   @CacheTTL(600) // 10 minutes
-  @RequireAuth("users.read")
+  @CanReadUsers()
   @ApiOperation({ summary: "Get user by ID" })
   @ApiResponse({
     status: 200,
@@ -92,7 +148,7 @@ export class UsersController {
   }
 
   @Post()
-  @RequireAuth("users.write")
+  @CanCreateUsers()
   @ApiOperation({ summary: "Create new user" })
   @ApiResponse({
     status: 201,
@@ -109,7 +165,7 @@ export class UsersController {
   }
 
   @Put(":id")
-  @RequireAuth("users.write")
+  @CanUpdateUsers()
   @ApiOperation({ summary: "Update user" })
   @ApiResponse({
     status: 200,
@@ -127,7 +183,7 @@ export class UsersController {
   }
 
   @Delete(":id")
-  @RequireAuth("users.delete")
+  @CanDeleteUsers()
   @ApiOperation({ summary: "Delete user (soft delete)" })
   @ApiResponse({ status: 200, description: "User deleted successfully" })
   @ApiResponse({ status: 404, description: "User not found" })

@@ -7,13 +7,21 @@ import {
   IsOptional,
 } from "class-validator";
 import { SystemUserRole } from "@prisma/client";
+import { IsAllowedEmailDomain, IsValidPhoneNumber } from "../validators";
+import { PasswordStrengthValidator } from "../validators/password-strength.validator";
+import { Validate } from "class-validator";
 
 export class BaseUserDto {
   @ApiProperty({
     example: "user@company.com",
     description: "User email address",
   })
-  @IsEmail()
+  @IsEmail({}, { message: "Please provide a valid email address" })
+  @IsAllowedEmailDomain(
+    [], // No specific allowed domains (allow all)
+    ["tempmail.org", "10minutemail.com", "guerrillamail.com", "mailinator.com"], // Block temporary email providers
+    { message: "Temporary email addresses are not allowed" }
+  )
   email: string;
 
   @ApiProperty({
@@ -35,21 +43,24 @@ export class BaseUserDto {
   lastName: string;
 
   @ApiProperty({
-    example: "password123",
-    description: "User password (minimum 6 characters)",
-    minLength: 6,
+    example: "MySecure123!",
+    description:
+      "User password (minimum 8 characters, must contain uppercase, lowercase, number and special character)",
+    minLength: 8,
   })
   @IsString()
-  @MinLength(6)
+  @Validate(PasswordStrengthValidator)
   password: string;
 
   @ApiProperty({
     example: "+1234567890",
-    description: "User phone number",
+    description: "User phone number in international format",
     required: false,
   })
   @IsOptional()
-  @IsString()
+  @IsValidPhoneNumber({
+    message: "Phone number must be in international format (e.g., +1234567890)",
+  })
   phoneNumber?: string;
 
   @ApiProperty({

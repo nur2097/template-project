@@ -8,6 +8,7 @@ import {
   HttpStatus,
   NotFoundException,
   BadRequestException,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -18,16 +19,33 @@ import {
 } from "@nestjs/swagger";
 import { AuthService } from "./services/auth.service";
 import { PasswordResetService } from "./services/password-reset.service";
+import { EmailVerificationService } from "./services/email-verification.service";
 import { UsersService } from "../users/users.service";
 import { EmailService } from "../email/email.service";
 import { CompaniesService } from "../companies/companies.service";
+import { ConfigurationService } from "../../config/configuration.service";
 import { RegisterDto } from "./dto/register.dto";
 import { UserResponseDto } from "../users/dto/user-response.dto";
 import { LoginDto } from "./dto/login.dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
+import {
+  LoginResponseDto,
+  RefreshTokenResponseDto,
+  LogoutResponseDto,
+  MeResponseDto,
+  AuthErrorResponseDto,
+} from "../../common/dto/auth-response.dto";
+import { ErrorResponseDto } from "../../common/dto/standard-response.dto";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Public } from "../../common/decorators/public.decorator";
+import { EnhancedRateLimitGuard } from "../../common/guards/rate-limit.guard";
+import {
+  LoginRateLimit,
+  RegisterRateLimit,
+  PasswordResetRateLimit,
+  EmailVerificationRateLimit,
+} from "../../common/decorators/rate-limit.decorator";
 
 @ApiTags("Authentication")
 @Controller("auth")
@@ -35,21 +53,38 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly emailVerificationService: EmailVerificationService,
     private readonly usersService: UsersService,
     private readonly emailService: EmailService,
-    private readonly companiesService: CompaniesService
+    private readonly companiesService: CompaniesService,
+    private readonly configService: ConfigurationService
   ) {}
 
   @Public()
   @Post("register")
+  @UseGuards(EnhancedRateLimitGuard)
+  @RegisterRateLimit()
   @ApiOperation({ summary: "Register new user" })
   @ApiResponse({
     status: 201,
     description: "User registered successfully",
-    type: AuthResponseDto,
+    type: LoginResponseDto,
   })
-  @ApiResponse({ status: 400, description: "Invalid input" })
-  @ApiResponse({ status: 409, description: "User already exists" })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid input",
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: "User already exists",
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Too many requests",
+    type: ErrorResponseDto,
+  })
   @ApiBody({ type: RegisterDto })
   async register(
     @Body() registerDto: RegisterDto,
@@ -60,14 +95,25 @@ export class AuthController {
 
   @Public()
   @Post("login")
+  @UseGuards(EnhancedRateLimitGuard)
+  @LoginRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "User login" })
   @ApiResponse({
     status: 200,
     description: "Login successful",
-    type: AuthResponseDto,
+    type: LoginResponseDto,
   })
-  @ApiResponse({ status: 401, description: "Invalid credentials" })
+  @ApiResponse({
+    status: 401,
+    description: "Invalid credentials",
+    type: AuthErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 429,
+    description: "Too many requests",
+    type: ErrorResponseDto,
+  })
   @ApiBody({ type: LoginDto })
   async login(
     @Body() loginDto: LoginDto,
@@ -81,8 +127,16 @@ export class AuthController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
-  @ApiResponse({ status: 200, description: "Token refreshed successfully" })
-  @ApiResponse({ status: 401, description: "Invalid refresh token" })
+  @ApiResponse({
+    status: 200,
+    description: "Token refreshed successfully",
+    type: RefreshTokenResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Invalid refresh token",
+    type: AuthErrorResponseDto,
+  })
   @ApiBody({ type: RefreshTokenDto })
   async refreshTokens(
     @Body() refreshTokenDto: RefreshTokenDto,
@@ -98,9 +152,13 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: "Profile retrieved successfully",
-    type: UserResponseDto,
+    type: MeResponseDto,
   })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized",
+    type: AuthErrorResponseDto,
+  })
   async getProfile(@CurrentUser() user: any): Promise<UserResponseDto> {
     return this.authService.validateUserById(user.sub);
   }
@@ -109,8 +167,16 @@ export class AuthController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "User logout" })
-  @ApiResponse({ status: 200, description: "Logout successful" })
-  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({
+    status: 200,
+    description: "Logout successful",
+    type: LogoutResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Unauthorized",
+    type: AuthErrorResponseDto,
+  })
   async logout(
     @CurrentUser() user: any,
     @Request() req: any
@@ -179,6 +245,8 @@ export class AuthController {
 
   @Public()
   @Post("forgot-password")
+  @UseGuards(EnhancedRateLimitGuard)
+  @PasswordResetRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Request password reset" })
   @ApiResponse({ status: 200, description: "Password reset email sent" })
@@ -193,19 +261,19 @@ export class AuthController {
       body.email
     );
 
-    // Here you would normally send an email with the reset token
-    // For development, you can log it or return it in the response
+    // TODO: Send reset token via email to user
+    // await this.emailService.sendPasswordResetEmail(body.email, resetToken);
 
-    const response: { message: string; resetToken?: string } = {
-      message: "Password reset instructions sent to email",
-    };
-
-    // Remove this in production
-    if (process.env.NODE_ENV === "development") {
-      response.resetToken = resetToken;
+    // For development: log token to console (remove in production)
+    if (this.configService.isDevelopment) {
+      console.log(`🔑 Password reset token for ${body.email}: ${resetToken}`);
     }
 
-    return response;
+    // SECURITY: Never return the reset token in response (even in development)
+    return {
+      message:
+        "If the email exists, password reset instructions have been sent",
+    };
   }
 
   @Public()
@@ -260,6 +328,8 @@ export class AuthController {
 
   @Public()
   @Post("send-verification")
+  @UseGuards(EnhancedRateLimitGuard)
+  @EmailVerificationRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Send email verification" })
   @ApiResponse({ status: 200, description: "Verification email sent" })
@@ -294,28 +364,20 @@ export class AuthController {
       }
     }
 
-    // Generate verification token (simple approach - in production use JWT or crypto)
+    // Generate and store verification token
     const verificationToken =
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15);
+      await this.emailVerificationService.generateVerificationToken(body.email);
 
-    // Store token in database (you might want to create a separate table for this)
-    // For now, we'll just send the email
+    // Send verification email
     await this.emailService.sendVerificationEmail(
       body.email,
       verificationToken
     );
 
-    const response: { message: string; verificationToken?: string } = {
-      message: "Verification email sent",
+    // SECURITY: Never return verification token in response (even in development)
+    return {
+      message: "If the email is valid, a verification link has been sent",
     };
-
-    // Remove this in production
-    if (process.env.NODE_ENV === "development") {
-      response.verificationToken = verificationToken;
-    }
-
-    return response;
   }
 
   @Public()
@@ -355,14 +417,8 @@ export class AuthController {
       }
     }
 
-    // TODO: Validate token from database
-    // For now, we'll accept any token for development
-    if (process.env.NODE_ENV !== "development" && !body.token) {
-      throw new BadRequestException("Invalid verification token");
-    }
-
-    // Verify the email
-    await this.usersService.verifyEmail(user.id);
+    // Verify token and email
+    await this.emailVerificationService.verifyToken(body.token, body.email);
 
     return { message: "Email verified successfully" };
   }

@@ -19,7 +19,9 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from "@nestjs/swagger";
-import { Throttle } from "@nestjs/throttler";
+import { EnhancedRateLimitGuard } from "../../common/guards/rate-limit.guard";
+import { CompanyRegistrationRateLimit } from "../../common/decorators/rate-limit.decorator";
+import { UseGuards } from "@nestjs/common";
 import { CompaniesService } from "./companies.service";
 import { CreateCompanyDto } from "./dto/create-company.dto";
 import { RegisterCompanyDto } from "./dto/register-company.dto";
@@ -54,7 +56,8 @@ export class CompaniesController {
 
   @Post("register")
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 3600000 } }) // 5 registrations per hour
+  @UseGuards(EnhancedRateLimitGuard)
+  @CompanyRegistrationRateLimit()
   @ApiOperation({
     summary: "Register new company with admin user (Public endpoint)",
   })

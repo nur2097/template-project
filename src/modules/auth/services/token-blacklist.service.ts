@@ -1,4 +1,4 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { ConfigService } from "@nestjs/config";
@@ -6,6 +6,8 @@ import { JwtService } from "@nestjs/jwt";
 
 @Injectable()
 export class TokenBlacklistService {
+  private readonly logger = new Logger(TokenBlacklistService.name);
+
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private configService: ConfigService,
@@ -34,7 +36,7 @@ export class TokenBlacklistService {
       // Store in Redis with TTL
       await this.cacheManager.set(`blacklist:${token}`, "true", ttl);
     } catch (error) {
-      console.error("Error blacklisting token:", error);
+      this.logger.error("Error blacklisting token:", error);
       // Continue execution even if blacklisting fails
     }
   }
@@ -105,7 +107,7 @@ export class TokenBlacklistService {
 
       return false;
     } catch (error) {
-      console.error("Error checking token blacklist:", error);
+      this.logger.error("Error checking token blacklist:", error);
       return false; // Fail open - don't block access if Redis is down
     }
   }
