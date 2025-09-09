@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Resend } from "resend";
+import { ConfigurationService } from "../../config/configuration.service";
 
 export interface EmailTemplate {
   subject: string;
@@ -25,14 +26,17 @@ export interface EmailResult {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly fromEmail = process.env.FROM_EMAIL || "noreply@example.com";
-  private readonly fromName = process.env.FROM_NAME || "API Service";
+  private readonly fromEmail: string;
+  private readonly fromName: string;
   private readonly resend: Resend;
 
-  constructor() {
+  constructor(private readonly configService: ConfigurationService) {
+    this.fromEmail = this.configService.fromEmail;
+    this.fromName = this.configService.fromName;
+
     // Only initialize Resend if API key is provided
-    if (process.env.RESEND_API_KEY) {
-      this.resend = new Resend(process.env.RESEND_API_KEY);
+    if (this.configService.resendApiKey) {
+      this.resend = new Resend(this.configService.resendApiKey);
     } else {
       // Create a mock Resend object for development/testing
       this.resend = null as any;
@@ -45,8 +49,8 @@ export class EmailService {
 
       // In development without Resend API key, just log the email
       if (
-        process.env.NODE_ENV === "development" &&
-        !process.env.RESEND_API_KEY
+        this.configService.isDevelopment &&
+        !this.configService.resendApiKey
       ) {
         this.logger.log({
           from: `${this.fromName} <${this.fromEmail}>`,
@@ -63,7 +67,7 @@ export class EmailService {
       }
 
       // Send real email using Resend
-      if (!process.env.RESEND_API_KEY || !this.resend) {
+      if (!this.configService.resendApiKey || !this.resend) {
         throw new Error("RESEND_API_KEY is not configured");
       }
 
@@ -107,7 +111,7 @@ export class EmailService {
     to: string,
     resetToken: string
   ): Promise<EmailResult> {
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const resetUrl = `${this.configService.frontendUrl}/reset-password?token=${resetToken}`;
 
     return this.sendEmail({
       to,
@@ -121,7 +125,7 @@ export class EmailService {
     to: string,
     verificationToken: string
   ): Promise<EmailResult> {
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${this.configService.frontendUrl}/verify-email?token=${verificationToken}`;
 
     return this.sendEmail({
       to,
@@ -181,12 +185,12 @@ export class EmailService {
 
   async testEmailConnection(): Promise<boolean> {
     try {
-      if (!process.env.RESEND_API_KEY || !this.resend) {
+      if (!this.configService.resendApiKey || !this.resend) {
         this.logger.warn(
           "RESEND_API_KEY not configured - using development mode"
         );
         // In development mode, consider email service as "working" since it logs emails
-        return process.env.NODE_ENV === "development";
+        return this.configService.isDevelopment;
       }
 
       // Test Resend connection by sending a test request

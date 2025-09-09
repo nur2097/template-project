@@ -124,7 +124,6 @@ export class AuthController {
 
   @Public()
   @Post("refresh")
-  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
   @ApiResponse({
@@ -139,11 +138,9 @@ export class AuthController {
   })
   @ApiBody({ type: RefreshTokenDto })
   async refreshTokens(
-    @Body() refreshTokenDto: RefreshTokenDto,
-    @Request() req: any
+    @Body() refreshTokenDto: RefreshTokenDto
   ): Promise<AuthResponseDto> {
-    const userId = req.user.sub;
-    return this.authService.refreshTokens(userId, refreshTokenDto.refreshToken);
+    return this.authService.refreshTokens(refreshTokenDto.refreshToken);
   }
 
   @Get("profile")

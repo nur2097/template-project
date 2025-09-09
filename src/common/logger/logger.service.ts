@@ -3,6 +3,7 @@ import { InjectConnection } from "@nestjs/mongoose";
 import { Connection } from "mongoose";
 import * as winston from "winston";
 import "winston-mongodb";
+import { ConfigurationService } from "../../config/configuration.service";
 
 export enum LogLevel {
   DEBUG = "debug",
@@ -25,9 +26,12 @@ export enum LogType {
 export class LoggerService implements NestLoggerService {
   private readonly winston: winston.Logger;
 
-  constructor(@InjectConnection() private connection: Connection) {
+  constructor(
+    @InjectConnection() private connection: Connection,
+    private readonly configService: ConfigurationService
+  ) {
     this.winston = winston.createLogger({
-      level: process.env.LOG_LEVEL || "info",
+      level: this.configService.logLevel,
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.errors({ stack: true }),
@@ -50,10 +54,10 @@ export class LoggerService implements NestLoggerService {
           ),
         }),
 
-        ...(process.env.LOG_TO_MONGODB !== "false" && process.env.MONGODB_URI
+        ...(this.configService.logToMongodb && this.configService.mongodbUri
           ? [
               new winston.transports.MongoDB({
-                db: process.env.MONGODB_URI,
+                db: this.configService.mongodbUri,
                 collection: "request_logs",
                 level: "debug",
                 options: {
@@ -66,7 +70,7 @@ export class LoggerService implements NestLoggerService {
               }),
 
               new winston.transports.MongoDB({
-                db: process.env.MONGODB_URI,
+                db: this.configService.mongodbUri,
                 collection: "error_logs",
                 level: "error",
                 options: {
@@ -80,7 +84,7 @@ export class LoggerService implements NestLoggerService {
               }),
 
               new winston.transports.MongoDB({
-                db: process.env.MONGODB_URI,
+                db: this.configService.mongodbUri,
                 collection: "info_logs",
                 level: "info",
                 options: {
@@ -97,13 +101,13 @@ export class LoggerService implements NestLoggerService {
     });
 
     if (
-      process.env.NODE_ENV !== "production" &&
-      process.env.LOG_TO_MONGODB !== "false" &&
-      process.env.MONGODB_URI
+      !this.configService.isProduction &&
+      this.configService.logToMongodb &&
+      this.configService.mongodbUri
     ) {
       this.winston.add(
         new winston.transports.MongoDB({
-          db: process.env.MONGODB_URI,
+          db: this.configService.mongodbUri,
           collection: "debug_logs",
           level: "debug",
           options: {
@@ -234,7 +238,7 @@ export class LoggerService implements NestLoggerService {
   }
 
   async logDebug(message: string, context?: string, metadata?: any) {
-    if (process.env.NODE_ENV === "production") return;
+    if (this.configService.isProduction) return;
 
     const collection = this.connection.db.collection("debug_logs");
     await collection.insertOne({

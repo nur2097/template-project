@@ -4,9 +4,12 @@ import {
   Logger,
   ConflictException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { PrismaService } from "../../shared/database/prisma.service";
 import { AuthService } from "../auth/services/auth.service";
+import { CasbinService } from "../../common/casbin/casbin.service";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RoleResponseDto } from "./dto/role-response.dto";
@@ -19,7 +22,9 @@ export class RolesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    @Inject(forwardRef(() => CasbinService))
+    private readonly casbinService: CasbinService
   ) {}
 
   // ================================
@@ -154,6 +159,16 @@ export class RolesService {
 
     this.logger.log(`Role '${createRoleDto.name}' created with ID ${role.id}`);
 
+    // Sync Casbin policies after role creation
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(`Casbin policies synced after role creation: ${role.id}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Casbin policies after role creation: ${error.message}`
+      );
+    }
+
     return {
       ...role,
       userCount: role._count.users,
@@ -210,6 +225,16 @@ export class RolesService {
 
     this.logger.log(`Role ${roleId} updated successfully`);
 
+    // Sync Casbin policies after role update
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(`Casbin policies synced after role update: ${roleId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Casbin policies after role update: ${error.message}`
+      );
+    }
+
     return {
       ...updatedRole,
       userCount: updatedRole._count.users,
@@ -240,22 +265,27 @@ export class RolesService {
     const userIds = role.users.map((ur) => ur.userId);
 
     // Delete all role assignments and permissions
-    await this.prisma.$transaction(async (tx) => {
-      // Remove role permissions
-      await tx.rolePermission.deleteMany({
-        where: { roleId },
-      });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Remove role permissions
+        await tx.rolePermission.deleteMany({
+          where: { roleId },
+        });
 
-      // Remove user role assignments
-      await tx.userRole.deleteMany({
-        where: { roleId },
-      });
+        // Remove user role assignments
+        await tx.userRole.deleteMany({
+          where: { roleId },
+        });
 
-      // Delete the role itself
-      await tx.role.delete({
-        where: { id: roleId },
+        // Delete the role itself
+        await tx.role.delete({
+          where: { id: roleId },
+        });
       });
-    });
+    } catch (error) {
+      this.logger.error(`Failed to delete role ${roleId}:`, error);
+      throw error; // Re-throw to maintain API contract
+    }
 
     // Invalidate tokens for all users who had this role
     if (userIds.length > 0) {
@@ -265,6 +295,16 @@ export class RolesService {
       );
     } else {
       this.logger.log(`Role ${roleId} deleted, no users affected`);
+    }
+
+    // Sync Casbin policies after role deletion
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(`Casbin policies synced after role deletion: ${roleId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Casbin policies after role deletion: ${error.message}`
+      );
     }
   }
 
@@ -551,17 +591,22 @@ export class RolesService {
     });
 
     // Delete permission and all its role associations
-    await this.prisma.$transaction(async (tx) => {
-      // Remove role-permission associations
-      await tx.rolePermission.deleteMany({
-        where: { permissionId },
-      });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Remove role-permission associations
+        await tx.rolePermission.deleteMany({
+          where: { permissionId },
+        });
 
-      // Delete the permission itself
-      await tx.permission.delete({
-        where: { id: permissionId },
+        // Delete the permission itself
+        await tx.permission.delete({
+          where: { id: permissionId },
+        });
       });
-    });
+    } catch (error) {
+      this.logger.error(`Failed to delete permission ${permissionId}:`, error);
+      throw error; // Re-throw to maintain API contract
+    }
 
     // Invalidate tokens for affected users
     if (affectedUserIds.size > 0) {
@@ -573,6 +618,18 @@ export class RolesService {
       );
     } else {
       this.logger.log(`Permission ${permissionId} deleted, no users affected`);
+    }
+
+    // Sync Casbin policies after permission deletion
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(
+        `Casbin policies synced after permission deletion: ${permissionId}`
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Casbin policies after permission deletion: ${error.message}`
+      );
     }
   }
 
@@ -620,6 +677,18 @@ export class RolesService {
     this.logger.log(
       `Role ${roleId} assigned to user ${userId}, tokens invalidated`
     );
+
+    // Sync Casbin policies after role assignment
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(
+        `Casbin policies synced after role assignment: user ${userId} -> role ${roleId}`
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Casbin policies after role assignment: ${error.message}`
+      );
+    }
   }
 
   /**
@@ -643,6 +712,18 @@ export class RolesService {
     this.logger.log(
       `Role ${roleId} removed from user ${userId}, tokens invalidated`
     );
+
+    // Sync Casbin policies after role removal
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(
+        `Casbin policies synced after role removal: user ${userId} <- role ${roleId}`
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Casbin policies after role removal: ${error.message}`
+      );
+    }
   }
 
   /**
@@ -715,6 +796,16 @@ export class RolesService {
         `Permission ${permissionId} added to role ${roleId}, no users affected`
       );
     }
+
+    // Sync Casbin policies after adding permission to role
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(
+        `Casbin policies synced after adding permission ${permissionId} to role ${roleId}`
+      );
+    } catch (error) {
+      this.logger.error(`Failed to sync Casbin policies: ${error.message}`);
+    }
   }
 
   /**
@@ -758,6 +849,16 @@ export class RolesService {
       this.logger.log(
         `Permission ${permissionId} removed from role ${roleId}, no users affected`
       );
+    }
+
+    // Sync Casbin policies after removing permission from role
+    try {
+      await this.casbinService.syncPolicies();
+      this.logger.log(
+        `Casbin policies synced after removing permission ${permissionId} from role ${roleId}`
+      );
+    } catch (error) {
+      this.logger.error(`Failed to sync Casbin policies: ${error.message}`);
     }
   }
 

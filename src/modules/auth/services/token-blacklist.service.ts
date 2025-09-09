@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger } from "@nestjs/common";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
-import { ConfigService } from "@nestjs/config";
+import { ConfigurationService } from "../../../config/configuration.service";
 import { JwtService } from "@nestjs/jwt";
 
 @Injectable()
@@ -10,7 +10,7 @@ export class TokenBlacklistService {
 
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    private configService: ConfigService,
+    private configService: ConfigurationService,
     private jwtService: JwtService
   ) {}
 
@@ -37,30 +37,56 @@ export class TokenBlacklistService {
       await this.cacheManager.set(`blacklist:${token}`, "true", ttl);
     } catch (error) {
       this.logger.error("Error blacklisting token:", error);
-      // Continue execution even if blacklisting fails
+      // SECURITY: Don't throw on single token blacklist failure as it's not critical
+      // The token will expire naturally based on its TTL
     }
   }
 
   async blacklistUserTokens(userId: number): Promise<void> {
-    // Store user ID in blacklist with current timestamp
-    const timestamp = Date.now();
-    const key = `blacklist:user:${userId}`;
+    try {
+      // Store user ID in blacklist with current timestamp
+      const timestamp = Date.now();
+      const key = `blacklist:user:${userId}`;
 
-    // Set TTL to match JWT expiration time
-    const jwtExpiresIn = this.configService.get("JWT_EXPIRES_IN", "1h");
-    const ttl = this.parseExpirationToMs(jwtExpiresIn);
+      // Set TTL to match JWT expiration time
+      const jwtExpiresIn = this.configService.jwtExpiresIn;
+      const ttl = this.parseExpirationToMs(jwtExpiresIn);
 
-    await this.cacheManager.set(key, timestamp.toString(), ttl);
+      await this.cacheManager.set(key, timestamp.toString(), ttl);
+      this.logger.log(`User ${userId} tokens blacklisted successfully`);
+    } catch (error) {
+      this.logger.error(
+        `CRITICAL: Failed to blacklist user ${userId} tokens:`,
+        error
+      );
+      // SECURITY: This is critical for permission changes, so we throw
+      throw new Error(
+        `Failed to invalidate permissions for user ${userId}: ${error.message}`
+      );
+    }
   }
 
   async blacklistDeviceTokens(userId: number, deviceId: string): Promise<void> {
-    const timestamp = Date.now();
-    const key = `blacklist:device:${userId}:${deviceId}`;
+    try {
+      const timestamp = Date.now();
+      const key = `blacklist:device:${userId}:${deviceId}`;
 
-    const jwtExpiresIn = this.configService.get("JWT_EXPIRES_IN", "1h");
-    const ttl = this.parseExpirationToMs(jwtExpiresIn);
+      const jwtExpiresIn = this.configService.jwtExpiresIn;
+      const ttl = this.parseExpirationToMs(jwtExpiresIn);
 
-    await this.cacheManager.set(key, timestamp.toString(), ttl);
+      await this.cacheManager.set(key, timestamp.toString(), ttl);
+      this.logger.log(
+        `Device ${deviceId} tokens for user ${userId} blacklisted successfully`
+      );
+    } catch (error) {
+      this.logger.error(
+        `CRITICAL: Failed to blacklist device ${deviceId} tokens for user ${userId}:`,
+        error
+      );
+      throw new Error(
+        `Failed to invalidate device permissions: ${error.message}`
+      );
+    }
   }
 
   async isTokenBlacklisted(token: string): Promise<boolean> {

@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
+import { ConfigurationService } from "../../config/configuration.service";
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -29,9 +30,8 @@ export interface UploadedFile {
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
-  private readonly uploadDir = process.env.UPLOAD_DIR || "./uploads";
-  private readonly maxFileSize =
-    parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5MB
+  private readonly uploadDir: string;
+  private readonly maxFileSize: number;
   private readonly allowedMimeTypes = [
     "image/jpeg",
     "image/jpg",
@@ -43,6 +43,11 @@ export class UploadService {
     "text/csv",
     "application/json",
   ];
+
+  constructor(private readonly configService: ConfigurationService) {
+    this.uploadDir = this.configService.uploadDest;
+    this.maxFileSize = this.configService.maxFileSize;
+  }
 
   async uploadFile(
     file: UploadedFile,

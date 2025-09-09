@@ -4,13 +4,7 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
-// Use enum values directly instead of imports to avoid Prisma client issues
-enum UserStatus {
-  ACTIVE = "ACTIVE",
-  INACTIVE = "INACTIVE",
-  SUSPENDED = "SUSPENDED",
-}
-
+import { UserStatus } from "@prisma/client";
 import { PasswordUtil } from "../../common/utils/password.util";
 import { PersonalInfo } from "../../common/utils/password-policy.util";
 import { PrismaService } from "../../shared/database/prisma.service";

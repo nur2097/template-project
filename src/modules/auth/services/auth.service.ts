@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
+import { ConfigurationService } from "../../../config/configuration.service";
 import { PasswordUtil } from "../../../common/utils/password.util";
 import { PersonalInfo } from "../../../common/utils/password-policy.util";
 import { UsersService } from "../../users/users.service";
@@ -43,7 +43,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigurationService,
     private readonly refreshTokenService: RefreshTokenService,
     private readonly deviceService: DeviceService,
     private readonly tokenBlacklistService: TokenBlacklistService,
@@ -141,10 +141,7 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(
-    userId: number,
-    refreshToken: string
-  ): Promise<AuthResponseDto> {
+  async refreshTokens(refreshToken: string): Promise<AuthResponseDto> {
     const tokens =
       await this.refreshTokenService.refreshAccessToken(refreshToken);
 
@@ -152,7 +149,14 @@ export class AuthService {
       throw new RefreshTokenNotFoundException();
     }
 
-    const user = await this.usersService.findOne(userId);
+    // Get user from validated refresh token
+    const tokenData =
+      await this.refreshTokenService.validateRefreshToken(refreshToken);
+    if (!tokenData) {
+      throw new RefreshTokenNotFoundException();
+    }
+
+    const user = await this.usersService.findOne(tokenData.userId);
 
     return {
       user,
@@ -306,8 +310,8 @@ export class AuthService {
     };
 
     return this.jwtService.signAsync(payload, {
-      secret: this.configService.get("JWT_SECRET"),
-      expiresIn: this.configService.get("JWT_EXPIRES_IN", "1h"),
+      secret: this.configService.jwtSecret,
+      expiresIn: this.configService.jwtExpiresIn,
     });
   }
 

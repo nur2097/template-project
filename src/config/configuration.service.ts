@@ -96,6 +96,18 @@ export class ConfigurationService {
     return this.configService.get("RESEND_API_KEY", { infer: true });
   }
 
+  get frontendUrl(): string {
+    return this.configService.get("FRONTEND_URL", { infer: true });
+  }
+
+  get fromEmail(): string {
+    return this.configService.get("FROM_EMAIL", { infer: true });
+  }
+
+  get fromName(): string {
+    return this.configService.get("FROM_NAME", { infer: true });
+  }
+
   // Rate Limiting
   get throttleTtl(): number {
     return this.configService.get("THROTTLE_TTL", { infer: true });
@@ -128,6 +140,14 @@ export class ConfigurationService {
 
   get otelServiceName(): string {
     return this.configService.get("OTEL_SERVICE_NAME", { infer: true });
+  }
+
+  get otelServiceVersion(): string {
+    return this.configService.get("OTEL_SERVICE_VERSION", { infer: true });
+  }
+
+  get tracingEnabled(): boolean {
+    return this.configService.get("TRACING_ENABLED", { infer: true });
   }
 
   // Cache Configuration

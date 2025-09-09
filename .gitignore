@@ -70,3 +70,7 @@ temp/
 yarn.lock
 pnpm-lock.yaml
 .env
+
+# Wiki - GitHub Wiki is the primary source
+wiki/
+*.wiki/

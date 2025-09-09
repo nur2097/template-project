@@ -119,38 +119,6 @@ export class UnifiedAuthGuard implements CanActivate {
     }
   }
 
-  private checkSystemRoles(context: ExecutionContext, user: any): boolean {
-    // Check @RequireAuth decorator
-    const authRequirements = this.reflector.getAllAndMerge<AuthRequirement[]>(
-      REQUIRE_AUTH_KEY,
-      [context.getHandler(), context.getClass()]
-    );
-
-    // Check @SuperAdminOnly decorator
-    const requiresSuperAdmin = this.reflector.getAllAndOverride<boolean>(
-      SUPER_ADMIN_ONLY_KEY,
-      [context.getHandler(), context.getClass()]
-    );
-
-    // SUPERADMIN bypass - highest priority
-    if (user.systemRole === SystemUserRole.SUPERADMIN) {
-      return true;
-    }
-
-    // SuperAdmin required but user is not superadmin
-    if (requiresSuperAdmin) {
-      throw new ForbiddenException("SuperAdmin access required");
-    }
-
-    // Process @RequireAuth requirements
-    if (authRequirements && authRequirements.length > 0) {
-      return this.processAuthRequirements(authRequirements, user);
-    }
-
-    // No specific system role requirements
-    return true;
-  }
-
   private processAuthRequirements(
     requirements: AuthRequirement[],
     user: any

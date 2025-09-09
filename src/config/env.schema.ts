@@ -130,6 +130,24 @@ export const envSchema = z.object({
     .optional()
     .describe("Resend API key for email service"),
 
+  // Frontend URL
+  FRONTEND_URL: z
+    .string()
+    .url()
+    .default("http://localhost:3000")
+    .describe("Frontend application URL for email links"),
+
+  FROM_EMAIL: z
+    .string()
+    .email()
+    .default("noreply@example.com")
+    .describe("Default from email address"),
+
+  FROM_NAME: z
+    .string()
+    .default("API Service")
+    .describe("Default from name for emails"),
+
   // Rate Limiting
   THROTTLE_TTL: z
     .string()
@@ -186,6 +204,21 @@ export const envSchema = z.object({
     .string()
     .default("nestjs-enterprise-api")
     .describe("Service name for OpenTelemetry"),
+
+  OTEL_SERVICE_VERSION: z
+    .string()
+    .default("1.0.0")
+    .describe("Service version for OpenTelemetry"),
+
+  TRACING_ENABLED: z
+    .string()
+    .transform((val) => val.toLowerCase())
+    .refine((val) => ["true", "false"].includes(val), {
+      message: "TRACING_ENABLED must be 'true' or 'false'",
+    })
+    .transform((val) => val === "true")
+    .default("true")
+    .describe("Enable OpenTelemetry tracing"),
 
   // Cache Configuration
   CACHE_TTL: z

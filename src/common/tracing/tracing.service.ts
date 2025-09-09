@@ -1,13 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { ConfigurationService } from "../../config/configuration.service";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+// Note: JaegerExporter is deprecated, but kept for compatibility
+// TODO: Migrate to @opentelemetry/exporter-otlp-http when upgrading
 import { JaegerExporter } from "@opentelemetry/exporter-jaeger";
-import {
-  SEMRESATTRS_SERVICE_NAME,
-  SEMRESATTRS_SERVICE_VERSION,
-  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-} from "@opentelemetry/semantic-conventions";
 import * as api from "@opentelemetry/api";
 
 @Injectable()
@@ -15,19 +12,15 @@ export class TracingService {
   private readonly logger = new Logger(TracingService.name);
   private sdk: NodeSDK | null = null;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigurationService) {}
 
   initialize(): void {
-    const serviceName =
-      this.configService.get<string>("SERVICE_NAME") || "nestjs-enterprise-api";
-    const serviceVersion =
-      this.configService.get<string>("SERVICE_VERSION") || "1.0.0";
-    const jaegerEndpoint = this.configService.get<string>("JAEGER_ENDPOINT");
+    const jaegerEndpoint = this.configService.otelJaegerEndpoint;
 
     // Skip tracing if disabled or in test environment
     if (
-      process.env.NODE_ENV === "test" ||
-      this.configService.get<string>("TRACING_ENABLED") === "false"
+      this.configService.nodeEnv === "test" ||
+      !this.configService.tracingEnabled
     ) {
       this.logger.warn("Tracing is disabled");
       return;
@@ -42,18 +35,10 @@ export class TracingService {
     }
 
     try {
-      // Skip resource creation that causes version conflicts
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const _attributes = {
-        [SEMRESATTRS_SERVICE_NAME]: serviceName,
-        [SEMRESATTRS_SERVICE_VERSION]: serviceVersion,
-        [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]:
-          process.env.NODE_ENV || "development",
-      };
-
       const exporters = [];
 
       // Add Jaeger exporter if endpoint is provided
+      // Note: JaegerExporter is deprecated but still functional
       if (jaegerEndpoint) {
         exporters.push(
           new JaegerExporter({
@@ -124,8 +109,8 @@ export class TracingService {
   // Helper methods for manual instrumentation
   startSpan(name: string, options?: api.SpanOptions): api.Span {
     const tracer = api.trace.getTracer(
-      this.configService.get<string>("SERVICE_NAME") || "nestjs-enterprise-api",
-      this.configService.get<string>("SERVICE_VERSION") || "1.0.0"
+      this.configService.otelServiceName,
+      this.configService.otelServiceVersion
     );
     return tracer.startSpan(name, options);
   }

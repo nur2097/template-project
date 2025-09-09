@@ -1,18 +1,20 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../../shared/database/prisma.service";
 import { RedisService } from "../../../shared/cache/redis.service";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
+import { ConfigurationService } from "../../../config/configuration.service";
 import { CryptoUtil } from "../../../common/utils/crypto.util";
 import * as crypto from "crypto";
 
 @Injectable()
 export class RefreshTokenService {
+  private readonly logger = new Logger(RefreshTokenService.name);
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigurationService
   ) {}
 
   async generateRefreshToken(
@@ -153,8 +155,8 @@ export class RefreshTokenService {
     };
 
     return this.jwtService.sign(payload, {
-      secret: this.configService.get("JWT_SECRET"),
-      expiresIn: this.configService.get("JWT_EXPIRES_IN", "1h"),
+      secret: this.configService.jwtSecret,
+      expiresIn: this.configService.jwtExpiresIn,
     });
   }
 
@@ -187,19 +189,12 @@ export class RefreshTokenService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
+    // First, perform database transaction
     const result = await this.prismaService.$transaction(async (prisma) => {
-      // First, revoke old refresh token and add to blacklist
+      // First, revoke old refresh token
       await prisma.refreshToken.deleteMany({
         where: { token: refreshToken },
       });
-
-      // Add to Redis blacklist atomically
-      const expiresIn = 7 * 24 * 60 * 60; // 7 days in seconds
-      await this.redisService.set(
-        `blacklist:${refreshToken}`,
-        "true",
-        expiresIn
-      );
 
       // Create new refresh token
       await prisma.refreshToken.create({
@@ -214,6 +209,21 @@ export class RefreshTokenService {
 
       return newRefreshTokenPlain;
     });
+
+    // AFTER successful database transaction, add to Redis blacklist
+    try {
+      const expiresIn = 7 * 24 * 60 * 60; // 7 days in seconds
+      await this.redisService.set(
+        `blacklist:${refreshToken}`,
+        "true",
+        expiresIn
+      );
+    } catch (error) {
+      // Redis blacklist failure is not critical, just log it
+      this.logger.warn(
+        `Failed to blacklist old refresh token in Redis: ${error.message}`
+      );
+    }
 
     return {
       accessToken,

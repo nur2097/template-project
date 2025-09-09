@@ -243,7 +243,7 @@ export class CasbinService implements OnModuleInit {
       });
 
       // Clear existing policies
-      await this.enforcer.clearPolicy();
+      this.enforcer.clearPolicy();
 
       for (const company of companies) {
         // Add role-permission mappings
