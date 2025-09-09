@@ -73,8 +73,6 @@ export class UsersService implements IUsersService {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       roles: _roles,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      apiKeys: _apiKeys,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       sessions: _sessions,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       devices: _devices,

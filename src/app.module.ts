@@ -11,7 +11,6 @@ import { LoggerModule } from "./common/logger/logger.module";
 import { HealthModule } from "./modules/health/health.module";
 import { EmailModule } from "./modules/email/email.module";
 import { UploadModule } from "./modules/upload/upload.module";
-// import { CacheTestModule } from "./modules/cache/cache.module"; // Only for development
 import { SecurityModule } from "./modules/security/security.module";
 import { QueueModule } from "./queue/queue.module";
 import { DatabaseModule } from "./shared/database/database.module";
@@ -55,7 +54,6 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
     HealthModule,
     EmailModule,
     UploadModule,
-    // CacheTestModule, // Only enable for cache testing
     QueueModule,
   ],
   providers: [
