@@ -17,6 +17,7 @@ import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 import { ROLES_KEY } from "../decorators/roles.decorator";
 import { TokenBlacklistService } from "../../modules/auth/services/token-blacklist.service";
 import { CasbinService } from "../casbin/casbin.service";
+import { ConfigurationService } from "../../config/configuration.service";
 import {
   CASBIN_RESOURCE_KEY,
   CASBIN_ACTION_KEY,
@@ -41,7 +42,8 @@ export class UnifiedAuthGuard implements CanActivate {
     private reflector: Reflector,
     private jwtService: JwtService,
     private tokenBlacklistService: TokenBlacklistService,
-    private casbinService: CasbinService
+    private casbinService: CasbinService,
+    private configService: ConfigurationService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -105,7 +107,14 @@ export class UnifiedAuthGuard implements CanActivate {
         return null;
       }
 
-      const payload = await this.jwtService.verifyAsync(token);
+      // Enhanced JWT verification with all security claims
+      const payload = await this.jwtService.verifyAsync(token, {
+        issuer: this.configService.jwtIssuer,
+        audience: this.configService.jwtAudience,
+        clockTolerance: 30,
+        maxAge: this.configService.jwtExpiresIn,
+        ignoreNotBefore: false,
+      });
 
       // Add token to payload for potential future blacklisting
       payload.token = token;
@@ -359,9 +368,11 @@ export class UnifiedAuthGuard implements CanActivate {
     }
 
     try {
-      // Check permission using Casbin
+      // Check permission using Casbin - use companyId from token
+      // Convert companyId to companySlug if needed by CasbinService
+      const companyIdentifier = user.companySlug || user.companyId;
       const hasPermission = await this.casbinService.enforceForCompanyUser(
-        user.companySlug,
+        companyIdentifier,
         user.sub,
         resource,
         action
@@ -369,7 +380,7 @@ export class UnifiedAuthGuard implements CanActivate {
 
       if (!hasPermission) {
         this.logger.warn(
-          `Casbin: Access denied for user ${user.sub} in company ${user.companySlug}. ` +
+          `Casbin: Access denied for user ${user.sub} in company ${companyIdentifier}. ` +
             `Resource: ${resource}, Action: ${action}`
         );
 
@@ -379,7 +390,7 @@ export class UnifiedAuthGuard implements CanActivate {
       }
 
       this.logger.debug(
-        `Casbin: Access granted for user ${user.sub} in company ${user.companySlug}. ` +
+        `Casbin: Access granted for user ${user.sub} in company ${companyIdentifier}. ` +
           `Resource: ${resource}, Action: ${action}`
       );
 

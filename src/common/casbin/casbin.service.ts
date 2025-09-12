@@ -7,7 +7,7 @@ import { PrismaService } from "../../shared/database/prisma.service";
 @Injectable()
 export class CasbinService implements OnModuleInit {
   private readonly logger = new Logger(CasbinService.name);
-  private enforcer: Enforcer;
+  private enforcer!: Enforcer;
 
   constructor(
     private readonly configService: ConfigurationService,

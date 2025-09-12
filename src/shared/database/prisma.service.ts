@@ -61,7 +61,7 @@ export class PrismaService
 
     for (const model of models) {
       try {
-        await this[model].deleteMany();
+        await (this as any)[model].deleteMany();
       } catch (error) {
         this.logger.warn(`Failed to clear ${model}:`, error);
       }

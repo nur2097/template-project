@@ -15,6 +15,7 @@ import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RoleResponseDto } from "./dto/role-response.dto";
 import { CreatePermissionDto } from "./dto/create-permission.dto";
 import { UpdatePermissionDto } from "./dto/update-permission.dto";
+import { getErrorMessage, toError } from "../../common/utils/error.utils";
 
 @Injectable()
 export class RolesService {
@@ -165,7 +166,7 @@ export class RolesService {
       this.logger.log(`Casbin policies synced after role creation: ${role.id}`);
     } catch (error) {
       this.logger.error(
-        `Failed to sync Casbin policies after role creation: ${error.message}`
+        `Failed to sync Casbin policies after role creation: ${getErrorMessage(error)}`
       );
     }
 
@@ -231,7 +232,7 @@ export class RolesService {
       this.logger.log(`Casbin policies synced after role update: ${roleId}`);
     } catch (error) {
       this.logger.error(
-        `Failed to sync Casbin policies after role update: ${error.message}`
+        `Failed to sync Casbin policies after role update: ${getErrorMessage(error)}`
       );
     }
 
@@ -284,7 +285,7 @@ export class RolesService {
       });
     } catch (error) {
       this.logger.error(`Failed to delete role ${roleId}:`, error);
-      throw error; // Re-throw to maintain API contract
+      throw toError(error); // Re-throw to maintain API contract
     }
 
     // Invalidate tokens for all users who had this role
@@ -303,7 +304,7 @@ export class RolesService {
       this.logger.log(`Casbin policies synced after role deletion: ${roleId}`);
     } catch (error) {
       this.logger.error(
-        `Failed to sync Casbin policies after role deletion: ${error.message}`
+        `Failed to sync Casbin policies after role deletion: ${getErrorMessage(error)}`
       );
     }
   }
@@ -605,7 +606,7 @@ export class RolesService {
       });
     } catch (error) {
       this.logger.error(`Failed to delete permission ${permissionId}:`, error);
-      throw error; // Re-throw to maintain API contract
+      throw toError(error); // Re-throw to maintain API contract
     }
 
     // Invalidate tokens for affected users
@@ -628,7 +629,7 @@ export class RolesService {
       );
     } catch (error) {
       this.logger.error(
-        `Failed to sync Casbin policies after permission deletion: ${error.message}`
+        `Failed to sync Casbin policies after permission deletion: ${getErrorMessage(error)}`
       );
     }
   }
@@ -686,7 +687,7 @@ export class RolesService {
       );
     } catch (error) {
       this.logger.error(
-        `Failed to sync Casbin policies after role assignment: ${error.message}`
+        `Failed to sync Casbin policies after role assignment: ${getErrorMessage(error)}`
       );
     }
   }
@@ -721,7 +722,7 @@ export class RolesService {
       );
     } catch (error) {
       this.logger.error(
-        `Failed to sync Casbin policies after role removal: ${error.message}`
+        `Failed to sync Casbin policies after role removal: ${getErrorMessage(error)}`
       );
     }
   }
@@ -804,7 +805,9 @@ export class RolesService {
         `Casbin policies synced after adding permission ${permissionId} to role ${roleId}`
       );
     } catch (error) {
-      this.logger.error(`Failed to sync Casbin policies: ${error.message}`);
+      this.logger.error(
+        `Failed to sync Casbin policies: ${getErrorMessage(error)}`
+      );
     }
   }
 
@@ -858,7 +861,9 @@ export class RolesService {
         `Casbin policies synced after removing permission ${permissionId} from role ${roleId}`
       );
     } catch (error) {
-      this.logger.error(`Failed to sync Casbin policies: ${error.message}`);
+      this.logger.error(
+        `Failed to sync Casbin policies: ${getErrorMessage(error)}`
+      );
     }
   }
 
@@ -1003,7 +1008,7 @@ export class RolesService {
       } catch (error) {
         failed.push({
           permission: permissionData,
-          reason: error.message || "Unknown error occurred",
+          reason: getErrorMessage(error) || "Unknown error occurred",
         });
       }
     }

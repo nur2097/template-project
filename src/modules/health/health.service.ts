@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { HealthIndicator, HealthIndicatorResult } from "@nestjs/terminus";
 import { PrismaService } from "../../shared/database/prisma.service";
 import { Connection as MongoConnection } from "mongoose";
@@ -55,7 +55,9 @@ export class HealthService extends HealthIndicator {
 
   constructor(
     private readonly prismaService: PrismaService,
-    @InjectConnection() private mongoConnection: MongoConnection,
+    @Optional()
+    @InjectConnection("logs")
+    private mongoConnection: MongoConnection | null,
     private readonly configService: ConfigService
   ) {
     super();
@@ -103,6 +105,16 @@ export class HealthService extends HealthIndicator {
 
   private async checkMongoDBStatus(): Promise<HealthIndicatorResult> {
     try {
+      if (!this.mongoConnection) {
+        return {
+          mongodb: {
+            status: "down",
+            database: "mongodb",
+            error: "MongoDB connection not available",
+          },
+        };
+      }
+
       if (this.mongoConnection.readyState === 1) {
         // Connection is open
         return {
@@ -204,12 +216,13 @@ export class HealthService extends HealthIndicator {
         };
       }
 
-      const result = await this.prismaService.$queryRaw`SELECT NOW() as now`;
+      const result = (await this.prismaService
+        .$queryRaw`SELECT NOW() as now`) as Array<{ now: Date }>;
       return {
         status: "healthy",
         details: {
           connected: true,
-          timestamp: result[0].now,
+          timestamp: result[0]?.now,
           database: "postgresql",
         },
       };
@@ -223,6 +236,13 @@ export class HealthService extends HealthIndicator {
 
   private async checkMongoDB(): Promise<HealthStatus> {
     try {
+      if (!this.mongoConnection) {
+        return {
+          status: "unhealthy",
+          message: "MongoDB connection not available",
+        };
+      }
+
       if (this.mongoConnection.readyState !== 1) {
         return {
           status: "unhealthy",

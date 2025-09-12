@@ -30,6 +30,7 @@ export interface TokenPayload {
   lastName: string;
   systemRole: string;
   companyId: number;
+  companySlug?: string; // Add company slug for Casbin consistency
   roles: string[];
   permissions: string[];
   deviceId: string;
@@ -304,6 +305,7 @@ export class AuthService {
       lastName: user.lastName,
       systemRole: user.systemRole,
       companyId: user.companyId,
+      companySlug: userWithPermissions?.company?.slug || null, // Add company slug for Casbin
       roles: userWithPermissions?.roles?.map((ur: any) => ur.role.name) || [],
       permissions: this.extractPermissions(userWithPermissions?.roles || []),
       deviceId: deviceId || "unknown",

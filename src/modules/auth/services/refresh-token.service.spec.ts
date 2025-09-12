@@ -4,7 +4,7 @@ import { PrismaService } from "../../../shared/database/prisma.service";
 import { CacheService } from "../../../shared/cache/cache.service";
 import { RedisService } from "../../../shared/cache/redis.service";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
+import { ConfigurationService } from "../../../config/configuration.service";
 
 describe("RefreshTokenService", () => {
   let service: RefreshTokenService;
@@ -22,11 +22,22 @@ describe("RefreshTokenService", () => {
               findMany: jest.fn(),
               update: jest.fn(),
               updateMany: jest.fn(),
+              delete: jest.fn(),
+              deleteMany: jest.fn(),
               count: jest.fn(),
             },
             device: {
               count: jest.fn(),
             },
+            $transaction: jest.fn().mockImplementation((callback) => {
+              const mockPrisma = {
+                refreshToken: {
+                  deleteMany: jest.fn(),
+                  create: jest.fn(),
+                },
+              };
+              return callback(mockPrisma);
+            }),
           },
         },
         {
@@ -43,18 +54,27 @@ describe("RefreshTokenService", () => {
             get: jest.fn(),
             set: jest.fn(),
             del: jest.fn(),
+            getClient: jest.fn().mockReturnValue({
+              pipeline: jest.fn().mockReturnValue({
+                set: jest.fn(),
+                exec: jest.fn().mockResolvedValue([]),
+              }),
+            }),
           },
         },
         {
           provide: JwtService,
           useValue: {
+            sign: jest.fn().mockReturnValue("test-access-token"),
             signAsync: jest.fn(),
             verifyAsync: jest.fn(),
           },
         },
         {
-          provide: ConfigService,
+          provide: ConfigurationService,
           useValue: {
+            jwtSecret: "test-secret-at-least-32-characters-long",
+            jwtExpiresIn: "1h",
             get: jest.fn(),
           },
         },
@@ -74,5 +94,9 @@ describe("RefreshTokenService", () => {
     expect(service.revokeDeviceTokens).toBeDefined();
     expect(service.revokeAllUserTokens).toBeDefined();
     expect(service.getUserActiveSessions).toBeDefined();
+    expect(service.validateRefreshToken).toBeDefined();
+    expect(service.revokeRefreshToken).toBeDefined();
+    expect(service.generateAccessToken).toBeDefined();
+    expect(service.cleanupExpiredTokens).toBeDefined();
   });
 });

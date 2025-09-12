@@ -5,31 +5,31 @@ import { SystemUserRole, UserStatus } from "@prisma/client";
 export class UserResponseDto {
   @ApiProperty()
   @Expose()
-  id: number;
+  id!: number;
 
   @ApiProperty()
   @Expose()
-  email: string;
+  email!: string;
 
   @ApiProperty()
   @Expose()
-  firstName: string;
+  firstName!: string;
 
   @ApiProperty()
   @Expose()
-  lastName: string;
+  lastName!: string;
 
   @ApiProperty()
   @Expose()
-  fullName: string;
+  fullName!: string;
 
   @ApiProperty({ enum: SystemUserRole })
   @Expose()
-  systemRole: SystemUserRole;
+  systemRole!: SystemUserRole;
 
   @ApiProperty({ enum: UserStatus })
   @Expose()
-  status: UserStatus;
+  status!: UserStatus;
 
   @ApiProperty({ required: false })
   @Expose()
@@ -41,7 +41,7 @@ export class UserResponseDto {
 
   @ApiProperty()
   @Expose()
-  emailVerified: boolean;
+  emailVerified!: boolean;
 
   @ApiProperty({ required: false })
   @Expose()
@@ -53,15 +53,15 @@ export class UserResponseDto {
 
   @ApiProperty()
   @Expose()
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty()
   @Expose()
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @ApiProperty()
   @Expose()
-  companyId: number;
+  companyId!: number;
 
   @ApiProperty({ required: false })
   @Expose()

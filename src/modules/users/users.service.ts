@@ -12,6 +12,7 @@ import { CacheService } from "../../shared/cache/cache.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserResponseDto } from "./dto/user-response.dto";
+import { toError } from "../../common/utils/error.utils";
 
 export interface IUsersService {
   create(
@@ -130,7 +131,7 @@ export class UsersService implements IUsersService {
       }
 
       // Re-throw other errors
-      throw error;
+      throw toError(error);
     }
   }
 

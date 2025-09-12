@@ -17,6 +17,7 @@ import { DatabaseModule } from "./shared/database/database.module";
 import { CacheModule } from "./shared/cache/cache.module";
 import { TracingModule } from "./common/tracing/tracing.module";
 import { CasbinModule } from "./common/casbin/casbin.module";
+import { RateLimitingModule } from "./common/rate-limiting/rate-limiting.module";
 import { GlobalExceptionFilter } from "./common/filters/http-exception.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { CorrelationInterceptor } from "./common/interceptors/correlation.interceptor";
@@ -27,13 +28,38 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
 
 @Module({
   imports: [
+    // Core configuration and database
     ConfigurationModule,
+    DatabaseModule,
+
+    // JWT authentication
     JwtModule.registerAsync({
       imports: [ConfigurationModule],
       inject: [ConfigurationService],
       useFactory: (config: ConfigurationService) => config.jwtConfig,
       global: true,
     }),
+
+    // Core business modules
+    AuthModule,
+    UsersModule,
+    CompaniesModule,
+    RolesModule,
+
+    // Infrastructure modules
+    CacheModule,
+    LoggerModule.forRoot(),
+    HealthModule,
+
+    // Enterprise features
+    CasbinModule,
+    TracingModule,
+    SecurityModule,
+    RateLimitingModule,
+    EmailModule,
+    UploadModule,
+
+    // Background processing
     BullModule.forRootAsync({
       imports: [ConfigurationModule],
       inject: [ConfigurationService],
@@ -41,49 +67,41 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
         redis: config.redisConfig,
       }),
     }),
-    TracingModule,
-    CasbinModule,
-    SecurityModule,
-    DatabaseModule,
-    CacheModule,
-    AuthModule,
-    UsersModule,
-    CompaniesModule,
-    RolesModule,
-    LoggerModule,
-    HealthModule,
-    EmailModule,
-    UploadModule,
     QueueModule,
   ],
   providers: [
+    // Global exception handling
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
     },
+
+    // Authentication guard
     {
       provide: APP_GUARD,
       useClass: UnifiedAuthGuard,
     },
+
+    // Interceptor chain (order matters: first registered runs first)
     {
       provide: APP_INTERCEPTOR,
-      useClass: CorrelationInterceptor,
+      useClass: CorrelationInterceptor, // Must be first to set correlation ID
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: PerformanceInterceptor,
+      useClass: TracingInterceptor, // Second for tracing context
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: TracingInterceptor,
+      useClass: PerformanceInterceptor, // Third for timing
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: ResponseInterceptor,
+      useClass: LoggingInterceptor, // Fourth for logging
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: LoggingInterceptor,
+      useClass: ResponseInterceptor, // Last to transform final response
     },
   ],
 })

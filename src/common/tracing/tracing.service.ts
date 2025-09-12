@@ -2,8 +2,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigurationService } from "../../config/configuration.service";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-// Note: JaegerExporter is deprecated, but kept for compatibility
-// TODO: Migrate to @opentelemetry/exporter-otlp-http when upgrading
 import { JaegerExporter } from "@opentelemetry/exporter-jaeger";
 import * as api from "@opentelemetry/api";
 
@@ -26,7 +24,7 @@ export class TracingService {
       return;
     }
 
-    // Temporary fix: Skip tracing initialization to avoid version conflicts
+    // Skip if no endpoint configured
     if (!jaegerEndpoint) {
       this.logger.warn(
         "OpenTelemetry tracing skipped - no Jaeger endpoint configured"
@@ -35,21 +33,12 @@ export class TracingService {
     }
 
     try {
-      const exporters = [];
-
-      // Add Jaeger exporter if endpoint is provided
-      // Note: JaegerExporter is deprecated but still functional
-      if (jaegerEndpoint) {
-        exporters.push(
-          new JaegerExporter({
-            endpoint: jaegerEndpoint,
-          })
-        );
-      }
+      const jaegerExporter = new JaegerExporter({
+        endpoint: jaegerEndpoint,
+      });
 
       this.sdk = new NodeSDK({
-        // resource: undefined, // Skip resource to avoid version conflicts
-        traceExporter: exporters.length > 0 ? exporters[0] : undefined,
+        traceExporter: jaegerExporter,
         instrumentations: [
           getNodeAutoInstrumentations({
             "@opentelemetry/instrumentation-redis": {
@@ -58,16 +47,29 @@ export class TracingService {
             "@opentelemetry/instrumentation-http": {
               enabled: true,
               requestHook: (span, request) => {
-                // Safely handle request body if it exists
-                if (
-                  request &&
-                  typeof request === "object" &&
-                  "body" in request
-                ) {
+                // Add safe request metadata without PII
+                if (request && typeof request === "object") {
+                  const safeHeaders = [
+                    "user-agent",
+                    "content-type",
+                    "authorization",
+                  ];
+                  const headers: Record<string, any> = {};
+
+                  if ("headers" in request && request.headers) {
+                    safeHeaders.forEach((header) => {
+                      if ((request.headers as any)[header]) {
+                        // Mask authorization header
+                        headers[header] =
+                          header === "authorization"
+                            ? "***MASKED***"
+                            : (request.headers as any)[header];
+                      }
+                    });
+                  }
+
                   span.setAttributes({
-                    "http.request.body": JSON.stringify(
-                      (request as any).body || {}
-                    ),
+                    "http.request.headers": JSON.stringify(headers),
                   });
                 }
               },
@@ -83,7 +85,9 @@ export class TracingService {
       });
 
       this.sdk.start();
-      this.logger.log("✅ OpenTelemetry tracing initialized successfully");
+      this.logger.log(
+        "✅ OpenTelemetry tracing initialized with Jaeger exporter"
+      );
     } catch (error) {
       this.logger.error(
         "❌ Failed to initialize OpenTelemetry tracing:",

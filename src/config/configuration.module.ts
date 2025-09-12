@@ -1,5 +1,5 @@
 import { Global, Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ConfigModule } from "@nestjs/config";
 import { validateEnvironment } from "./env.schema";
 import { ConfigurationService } from "./configuration.service";
 
@@ -22,6 +22,6 @@ import { ConfigurationService } from "./configuration.service";
     }),
   ],
   providers: [ConfigurationService],
-  exports: [ConfigService, ConfigurationService],
+  exports: [ConfigurationService],
 })
 export class ConfigurationModule {}

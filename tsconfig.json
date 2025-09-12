@@ -12,11 +12,14 @@
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
+    "strict": false,
     "strictNullChecks": false,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictBindCallApply": false,
-    "forceConsistentCasingInFileNames": false,
-    "noFallthroughCasesInSwitch": false,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "paths": {
       "@/*": ["src/*"],
       "@modules/*": ["src/modules/*"],
@@ -25,6 +28,6 @@
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/**/*", "prisma/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  "include": ["src/**/*", "prisma/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -1,5 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsEmail, IsNotEmpty, IsString, MinLength } from "class-validator";
+import {
+  SanitizeText,
+  Trim,
+} from "../../../common/decorators/sanitize.decorator";
 
 export class LoginDto {
   @ApiProperty({
@@ -8,6 +12,8 @@ export class LoginDto {
   })
   @IsEmail({}, { message: "Please provide a valid email address" })
   @IsNotEmpty({ message: "Email is required" })
+  @Trim()
+  @SanitizeText()
   email: string;
 
   @ApiProperty({

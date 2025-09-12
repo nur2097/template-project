@@ -13,7 +13,7 @@ async function bootstrap() {
   // Get type-safe configuration service
   const configService = app.get(ConfigurationService);
 
-  // Custom logger
+  // Custom logger for enterprise logging
   const customLogger = app.get(NestLoggerWrapper);
   app.useLogger(customLogger);
 

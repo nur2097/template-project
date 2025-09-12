@@ -72,6 +72,14 @@ export class ConfigurationService {
     return this.configService.get("JWT_EXPIRES_IN", { infer: true });
   }
 
+  get jwtIssuer(): string {
+    return this.configService.get("JWT_ISSUER", { infer: true });
+  }
+
+  get jwtAudience(): string {
+    return this.configService.get("JWT_AUDIENCE", { infer: true });
+  }
+
   // CORS Configuration
   get corsOrigin(): string {
     return this.configService.get("CORS_ORIGIN", { infer: true });
@@ -88,7 +96,13 @@ export class ConfigurationService {
 
   // Swagger Configuration
   get swaggerEnabled(): boolean {
-    return this.configService.get("SWAGGER_ENABLED", { infer: true });
+    // Disable Swagger in production by default for security
+    if (this.isProduction) {
+      return (
+        this.configService.get("SWAGGER_ENABLED", { infer: true }) === true
+      );
+    }
+    return this.configService.get("SWAGGER_ENABLED", { infer: true }) !== false;
   }
 
   // Email Configuration
@@ -171,7 +185,18 @@ export class ConfigurationService {
   get jwtConfig() {
     return {
       secret: this.jwtSecret,
-      signOptions: { expiresIn: this.jwtExpiresIn },
+      signOptions: {
+        expiresIn: this.jwtExpiresIn,
+        issuer: this.jwtIssuer,
+        audience: this.jwtAudience,
+      },
+      verifyOptions: {
+        issuer: this.jwtIssuer,
+        audience: this.jwtAudience,
+        clockTolerance: 30, // Allow 30 seconds clock skew
+        maxAge: this.jwtExpiresIn,
+        ignoreNotBefore: false, // Respect 'nbf' claim
+      },
     };
   }
 
@@ -190,8 +215,17 @@ export class ConfigurationService {
   }
 
   get corsConfig() {
+    // Fix: credentials:true cannot be used with origin:* for security
+    const origins =
+      this.corsOrigin === "*"
+        ? false // Disable credentials when wildcard is used
+        : this.corsOrigin
+            .split(",")
+            .map((origin) => origin.trim())
+            .filter(Boolean);
+
     return {
-      origin: this.corsOrigin === "*" ? true : this.corsOrigin.split(","),
+      origin: this.corsOrigin === "*" ? true : origins,
       methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       allowedHeaders: [
         "Origin",
@@ -201,7 +235,7 @@ export class ConfigurationService {
         "Authorization",
         "X-Correlation-ID",
       ],
-      credentials: true,
+      credentials: this.corsOrigin !== "*", // Only enable credentials when specific origins are set
       optionsSuccessStatus: 200,
     };
   }

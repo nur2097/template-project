@@ -46,15 +46,21 @@ export const envSchema = z.object({
 
   MONGODB_LOG_DB: z
     .string()
-    .url()
     .refine(
-      (url) => url.startsWith("mongodb://") || url.startsWith("mongodb+srv://"),
+      (value) => {
+        // Accept either a simple database name or a full connection string
+        return (
+          /^[a-zA-Z0-9_-]+$/.test(value) || // Simple database name
+          value.startsWith("mongodb://") ||
+          value.startsWith("mongodb+srv://")
+        );
+      },
       {
-        message: "MONGODB_LOG_DB must be a valid MongoDB connection string",
+        message:
+          "MONGODB_LOG_DB must be a valid database name or MongoDB connection string",
       }
     )
-    .optional()
-    .describe("MongoDB log database connection URL (optional)"),
+    .describe("MongoDB log database name or full connection string"),
 
   // Redis Configuration
   REDIS_HOST: z
@@ -238,6 +244,19 @@ export const envSchema = z.object({
     })
     .default("100")
     .describe("Maximum number of cached items"),
+
+  // JWT Configuration (more secure than using FROM_NAME)
+  JWT_ISSUER: z
+    .string()
+    .min(1)
+    .default("nestjs-enterprise-api")
+    .describe("JWT token issuer"),
+
+  JWT_AUDIENCE: z
+    .string()
+    .min(1)
+    .default("nestjs-enterprise-client")
+    .describe("JWT token audience"),
 });
 
 // Type inference for the validated environment

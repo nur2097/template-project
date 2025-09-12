@@ -2,7 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AuthService } from "./auth.service";
 import { UsersService } from "../../users/users.service";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
+import { ConfigurationService } from "../../../config/configuration.service";
 import { RefreshTokenService } from "./refresh-token.service";
 import { DeviceService } from "./device.service";
 import { TokenBlacklistService } from "./token-blacklist.service";
@@ -32,8 +32,10 @@ describe("AuthService", () => {
           },
         },
         {
-          provide: ConfigService,
+          provide: ConfigurationService,
           useValue: {
+            jwtSecret: "test-secret-at-least-32-characters-long",
+            jwtExpiresIn: "1h",
             get: jest.fn(),
           },
         },

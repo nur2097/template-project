@@ -12,7 +12,6 @@ import { DatabaseModule } from "../../shared/database/database.module";
 import { CacheModule } from "../../shared/cache/cache.module";
 import { ConfigurationModule } from "../../config";
 import { EmailModule } from "../email/email.module";
-
 @Module({
   imports: [
     TerminusModule,

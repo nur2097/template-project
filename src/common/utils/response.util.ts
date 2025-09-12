@@ -9,6 +9,7 @@ export interface StandardResponse<T = any> {
   data?: T;
   meta?: any;
   requestId?: string;
+  _isStandardResponse?: boolean; // Internal marker to prevent false positives
 }
 
 export class ResponseUtil {
@@ -27,6 +28,7 @@ export class ResponseUtil {
       message,
       data,
       ...(meta && { meta }),
+      _isStandardResponse: true,
     };
   }
 
@@ -49,6 +51,7 @@ export class ResponseUtil {
       message,
       data,
       meta,
+      _isStandardResponse: true,
     };
   }
 
@@ -64,6 +67,7 @@ export class ResponseUtil {
       timestamp: new Date().toISOString(),
       message,
       data,
+      _isStandardResponse: true,
     };
   }
 
@@ -77,6 +81,7 @@ export class ResponseUtil {
       statusCode: HttpStatus.NO_CONTENT,
       timestamp: new Date().toISOString(),
       message,
+      _isStandardResponse: true,
     };
   }
 
@@ -97,6 +102,7 @@ export class ResponseUtil {
       meta: {
         warnings,
       },
+      _isStandardResponse: true,
     };
   }
 }

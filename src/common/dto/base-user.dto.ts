@@ -10,6 +10,7 @@ import { SystemUserRole } from "@prisma/client";
 import { IsAllowedEmailDomain, IsValidPhoneNumber } from "../validators";
 import { PasswordStrengthValidator } from "../validators/password-strength.validator";
 import { Validate } from "class-validator";
+import { SanitizeText, Trim } from "../decorators/sanitize.decorator";
 
 export class BaseUserDto {
   @ApiProperty({
@@ -22,6 +23,8 @@ export class BaseUserDto {
     ["tempmail.org", "10minutemail.com", "guerrillamail.com", "mailinator.com"], // Block temporary email providers
     { message: "Temporary email addresses are not allowed" }
   )
+  @Trim()
+  @SanitizeText()
   email: string;
 
   @ApiProperty({
@@ -31,6 +34,8 @@ export class BaseUserDto {
   @IsString()
   @MinLength(1)
   @MaxLength(50)
+  @Trim()
+  @SanitizeText()
   firstName: string;
 
   @ApiProperty({
@@ -40,6 +45,8 @@ export class BaseUserDto {
   @IsString()
   @MinLength(1)
   @MaxLength(50)
+  @Trim()
+  @SanitizeText()
   lastName: string;
 
   @ApiProperty({

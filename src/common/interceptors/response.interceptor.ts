@@ -20,6 +20,21 @@ export class ResponseInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data) => {
+        // Skip transformation for 204 No Content responses
+        if (response.statusCode === 204) {
+          return; // Return undefined for no content
+        }
+
+        // Skip transformation for binary/stream responses
+        if (this.isBinaryOrStreamResponse(response, data)) {
+          return data; // Return as-is for binary/file responses
+        }
+
+        // Skip transformation if headers already sent (SSE, chunked responses)
+        if (response.headersSent) {
+          return data;
+        }
+
         // Skip transformation if data is already in standard format
         if (this.isStandardResponse(data)) {
           // Add request context if missing
@@ -45,6 +60,7 @@ export class ResponseInterceptor implements NestInterceptor {
           method: request.method,
           message: this.getSuccessMessage(request.method, statusCode),
           requestId: requestId as string,
+          _isStandardResponse: true, // Internal marker to prevent false positives
         };
 
         // Add data if exists
@@ -70,12 +86,21 @@ export class ResponseInterceptor implements NestInterceptor {
   }
 
   private isStandardResponse(data: any): boolean {
+    // More comprehensive check to avoid false positives
     return (
       data &&
       typeof data === "object" &&
       "statusCode" in data &&
       "timestamp" in data &&
-      "message" in data
+      "message" in data &&
+      "path" in data &&
+      "requestId" in data &&
+      // Ensure statusCode is a number (HTTP status code)
+      typeof data.statusCode === "number" &&
+      // Ensure timestamp is a string (ISO format)
+      typeof data.timestamp === "string" &&
+      // Additional marker to confirm it's our standard response
+      data._isStandardResponse !== false
     );
   }
 
@@ -97,6 +122,40 @@ export class ResponseInterceptor implements NestInterceptor {
       default:
         return "Operation completed successfully";
     }
+  }
+
+  private isBinaryOrStreamResponse(response: any, data: any): boolean {
+    // Check if response has binary content type
+    const contentType = response.getHeader("content-type") || "";
+    const binaryTypes = [
+      "application/octet-stream",
+      "application/pdf",
+      "image/",
+      "video/",
+      "audio/",
+      "application/zip",
+      "application/x-",
+    ];
+
+    if (binaryTypes.some((type) => contentType.toLowerCase().includes(type))) {
+      return true;
+    }
+
+    // Check if data is a Buffer or Stream
+    if (Buffer.isBuffer(data)) {
+      return true;
+    }
+
+    // Check if data is a stream-like object
+    if (
+      data &&
+      typeof data === "object" &&
+      (typeof data.pipe === "function" || typeof data.read === "function")
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   private generateRequestId(): string {

@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
 import { ConfigurationService } from "../../config/configuration.service";
+import { getErrorMessage } from "../../common/utils/error.utils";
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -88,10 +89,13 @@ export class UploadService {
         mimetype: file.mimetype,
       };
     } catch (error) {
-      this.logger.error(`File upload failed: ${error.message}`, error.stack);
+      this.logger.error(
+        `File upload failed: ${getErrorMessage(error)}`,
+        error.stack
+      );
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -128,7 +132,7 @@ export class UploadService {
       this.logger.log(`File deleted: ${filePath}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to delete file: ${error.message}`);
+      this.logger.error(`Failed to delete file: ${getErrorMessage(error)}`);
       return false;
     }
   }

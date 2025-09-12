@@ -15,7 +15,7 @@ export const CurrentUser = createParamDecorator(
   (
     data: keyof CurrentUserPayload | undefined,
     ctx: ExecutionContext
-  ): CurrentUserPayload => {
+  ): CurrentUserPayload | null => {
     const request = ctx.switchToHttp().getRequest();
     const user = request.user;
 

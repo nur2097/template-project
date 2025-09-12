@@ -1,4 +1,8 @@
-import { Injectable, LoggerService as NestLoggerService } from "@nestjs/common";
+import {
+  Injectable,
+  LoggerService as NestLoggerService,
+  Optional,
+} from "@nestjs/common";
 import { InjectConnection } from "@nestjs/mongoose";
 import { Connection } from "mongoose";
 import * as winston from "winston";
@@ -27,9 +31,10 @@ export class LoggerService implements NestLoggerService {
   private readonly winston: winston.Logger;
 
   constructor(
-    @InjectConnection() private connection: Connection,
+    @Optional() @InjectConnection("logs") private connection: Connection,
     private readonly configService: ConfigurationService
   ) {
+    // Only create winston logger if logging to MongoDB is disabled or for console only
     this.winston = winston.createLogger({
       level: this.configService.logLevel,
       format: winston.format.combine(
@@ -53,73 +58,10 @@ export class LoggerService implements NestLoggerService {
             )
           ),
         }),
-
-        ...(this.configService.logToMongodb && this.configService.mongodbUri
-          ? [
-              new winston.transports.MongoDB({
-                db: this.configService.mongodbUri,
-                collection: "request_logs",
-                level: "debug",
-                options: {
-                  useUnifiedTopology: true,
-                },
-                format: winston.format.combine(
-                  winston.format.timestamp(),
-                  winston.format.json()
-                ),
-              }),
-
-              new winston.transports.MongoDB({
-                db: this.configService.mongodbUri,
-                collection: "error_logs",
-                level: "error",
-                options: {
-                  useUnifiedTopology: true,
-                },
-                format: winston.format.combine(
-                  winston.format.timestamp(),
-                  winston.format.errors({ stack: true }),
-                  winston.format.json()
-                ),
-              }),
-
-              new winston.transports.MongoDB({
-                db: this.configService.mongodbUri,
-                collection: "info_logs",
-                level: "info",
-                options: {
-                  useUnifiedTopology: true,
-                },
-                format: winston.format.combine(
-                  winston.format.timestamp(),
-                  winston.format.json()
-                ),
-              }),
-            ]
-          : []),
+        // Remove winston-mongodb transports to avoid duplicate logging
+        // Use manual insertOne methods below for more control
       ],
     });
-
-    if (
-      !this.configService.isProduction &&
-      this.configService.logToMongodb &&
-      this.configService.mongodbUri
-    ) {
-      this.winston.add(
-        new winston.transports.MongoDB({
-          db: this.configService.mongodbUri,
-          collection: "debug_logs",
-          level: "debug",
-          options: {
-            useUnifiedTopology: true,
-          },
-          format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.json()
-          ),
-        })
-      );
-    }
   }
 
   log(message: any, context?: string) {
@@ -152,12 +94,22 @@ export class LoggerService implements NestLoggerService {
     userId?: string;
     correlationId?: string;
   }) {
-    const collection = this.connection.db.collection("request_logs");
-    await collection.insertOne({
-      ...data,
-      timestamp: new Date(),
-      type: LogType.REQUEST,
-    });
+    // Only log to MongoDB if enabled and connection is available
+    if (this.configService.logToMongodb && this.connection) {
+      try {
+        const collection = this.connection.db.collection("request_logs");
+        await collection.insertOne({
+          ...data,
+          timestamp: new Date(),
+          type: LogType.REQUEST,
+        });
+      } catch (error) {
+        // Fallback to winston console logging if MongoDB fails
+        this.winston.error("Failed to log to MongoDB", {
+          error: error.message,
+        });
+      }
+    }
 
     this.winston.info(`${data.method} ${data.url}`, {
       context: "HttpRequest",
@@ -174,12 +126,20 @@ export class LoggerService implements NestLoggerService {
     userId?: string;
     correlationId?: string;
   }) {
-    const collection = this.connection.db.collection("response_logs");
-    await collection.insertOne({
-      ...data,
-      timestamp: new Date(),
-      type: LogType.RESPONSE,
-    });
+    if (this.configService.logToMongodb && this.connection) {
+      try {
+        const collection = this.connection.db.collection("response_logs");
+        await collection.insertOne({
+          ...data,
+          timestamp: new Date(),
+          type: LogType.RESPONSE,
+        });
+      } catch (error) {
+        this.winston.error("Failed to log response to MongoDB", {
+          error: error.message,
+        });
+      }
+    }
 
     this.winston.info(
       `${data.method} ${data.url} - ${data.statusCode} - ${data.responseTime}ms`,
@@ -198,17 +158,24 @@ export class LoggerService implements NestLoggerService {
     userId?: string,
     metadata?: any
   ) {
-    const collection = this.connection.db.collection("error_logs");
-    await collection.insertOne({
-      message,
-      stack,
-      context,
-      userId,
-      metadata,
-      timestamp: new Date(),
-      type: LogType.ERROR,
-      level: LogLevel.ERROR,
-    });
+    if (this.configService.logToMongodb && this.connection) {
+      try {
+        const collection = this.connection.db.collection("error_logs");
+        await collection.insertOne({
+          message,
+          stack,
+          context,
+          userId,
+          metadata,
+          timestamp: new Date(),
+          type: LogType.ERROR,
+          level: LogLevel.ERROR,
+        });
+      } catch (error) {
+        // Don't use winston.error here to avoid infinite recursion
+        console.error("Failed to log error to MongoDB:", error.message);
+      }
+    }
 
     this.winston.error(message, {
       context,
@@ -220,15 +187,23 @@ export class LoggerService implements NestLoggerService {
   }
 
   async logInfo(message: string, context?: string, metadata?: any) {
-    const collection = this.connection.db.collection("info_logs");
-    await collection.insertOne({
-      message,
-      context,
-      metadata,
-      timestamp: new Date(),
-      type: LogType.INFO,
-      level: LogLevel.INFO,
-    });
+    if (this.configService.logToMongodb && this.connection) {
+      try {
+        const collection = this.connection.db.collection("info_logs");
+        await collection.insertOne({
+          message,
+          context,
+          metadata,
+          timestamp: new Date(),
+          type: LogType.INFO,
+          level: LogLevel.INFO,
+        });
+      } catch (error) {
+        this.winston.error("Failed to log info to MongoDB", {
+          error: error.message,
+        });
+      }
+    }
 
     this.winston.info(message, {
       context,
@@ -240,15 +215,23 @@ export class LoggerService implements NestLoggerService {
   async logDebug(message: string, context?: string, metadata?: any) {
     if (this.configService.isProduction) return;
 
-    const collection = this.connection.db.collection("debug_logs");
-    await collection.insertOne({
-      message,
-      context,
-      metadata,
-      timestamp: new Date(),
-      type: LogType.DEBUG,
-      level: LogLevel.DEBUG,
-    });
+    if (this.configService.logToMongodb && this.connection) {
+      try {
+        const collection = this.connection.db.collection("debug_logs");
+        await collection.insertOne({
+          message,
+          context,
+          metadata,
+          timestamp: new Date(),
+          type: LogType.DEBUG,
+          level: LogLevel.DEBUG,
+        });
+      } catch (error) {
+        this.winston.error("Failed to log debug to MongoDB", {
+          error: error.message,
+        });
+      }
+    }
 
     this.winston.debug(message, {
       context,
@@ -270,12 +253,20 @@ export class LoggerService implements NestLoggerService {
     timestamp?: Date;
     metadata?: any;
   }) {
-    const collection = this.connection.db.collection("performance_logs");
-    await collection.insertOne({
-      ...data,
-      timestamp: data.timestamp || new Date(),
-      type: LogType.PERFORMANCE,
-    });
+    if (this.configService.logToMongodb && this.connection) {
+      try {
+        const collection = this.connection.db.collection("performance_logs");
+        await collection.insertOne({
+          ...data,
+          timestamp: data.timestamp || new Date(),
+          type: LogType.PERFORMANCE,
+        });
+      } catch (error) {
+        this.winston.error("Failed to log performance to MongoDB", {
+          error: error.message,
+        });
+      }
+    }
 
     this.winston.info(`PERF: ${data.operation} - ${data.duration}ms`, {
       context: "Performance",
@@ -288,6 +279,10 @@ export class LoggerService implements NestLoggerService {
     collectionName: string,
     cutoffDate: Date
   ): Promise<{ deletedCount: number }> {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return { deletedCount: 0 };
+    }
+
     try {
       const collection = this.connection.db.collection(collectionName);
       const result = await collection.deleteMany({
@@ -300,31 +295,49 @@ export class LoggerService implements NestLoggerService {
   }
 
   async getLogs(limit = 100) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("info_logs");
     return collection.find().sort({ timestamp: -1 }).limit(limit).toArray();
   }
 
   async getRequestLogs(limit = 100) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("request_logs");
     return collection.find().sort({ timestamp: -1 }).limit(limit).toArray();
   }
 
   async getResponseLogs(limit = 100) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("response_logs");
     return collection.find().sort({ timestamp: -1 }).limit(limit).toArray();
   }
 
   async getErrorLogs(limit = 100) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("error_logs");
     return collection.find().sort({ timestamp: -1 }).limit(limit).toArray();
   }
 
   async getPerformanceLogs(limit = 100) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("performance_logs");
     return collection.find().sort({ timestamp: -1 }).limit(limit).toArray();
   }
 
   async getErrorStats(hours = 24) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("error_logs");
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 
@@ -338,6 +351,9 @@ export class LoggerService implements NestLoggerService {
   }
 
   async getPerformanceStats(hours = 24) {
+    if (!this.configService.logToMongodb || !this.connection) {
+      return [];
+    }
     const collection = this.connection.db.collection("performance_logs");
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 

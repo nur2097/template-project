@@ -12,7 +12,7 @@ export const CurrentCompany = createParamDecorator(
   (
     data: keyof CurrentCompanyPayload | undefined,
     ctx: ExecutionContext
-  ): CurrentCompanyPayload => {
+  ): CurrentCompanyPayload | null => {
     const request = ctx.switchToHttp().getRequest();
     const company = request.company;
 
