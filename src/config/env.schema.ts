@@ -303,6 +303,11 @@ export function validateEnvironment(): Environment {
       );
     }
 
+    // In test environment, throw error instead of exiting
+    if (process.env.NODE_ENV === "test") {
+      throw new Error("Environment validation failed");
+    }
+
     process.exit(1);
   }
 }

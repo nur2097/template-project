@@ -7,13 +7,98 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    env:
+      NODE_ENV: test
+      DATABASE_URL: "postgresql://test:test@localhost:5432/testdb"
+      MONGODB_URI: "mongodb://localhost:27017/test_logs"
+      MONGODB_LOG_DB: "mongodb://localhost:27017/test_logs"
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: "test-secret-key-minimum-32-chars-required-for-security"
+      JWT_EXPIRES_IN: "1h"
+      JWT_REFRESH_EXPIRES_IN: "7d"
+      JWT_ISSUER: "test-api"
+      JWT_AUDIENCE: "test-users"
+      PORT: 3001
+      API_PREFIX: "api"
+      CORS_ORIGIN: "http://localhost:3001"
+      SWAGGER_ENABLED: "false"
+      LOG_LEVEL: "error"
+      BCRYPT_ROUNDS: 4
+      THROTTLE_TTL: 60
+      THROTTLE_LIMIT: 100
+      MAX_FILE_SIZE: 10485760
+      UPLOAD_DEST: "./test-uploads"
+      CACHE_TTL: 300
+      CACHE_MAX_ITEMS: 100
+      TRACING_ENABLED: "false"
+      
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: test
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js
-        uses: actions/setup-node@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm install
-      - run: npm run build
-      - run: npm test
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        
+      - name: Setup test database
+        run: |
+          echo "DATABASE_URL=${{ env.DATABASE_URL }}" > .env.test
+          npx prisma migrate deploy
+          
+      - name: Build application
+        run: npm run build
+        
+      - name: Run linting
+        run: npm run lint
+        
+      - name: Run tests
+        run: npm test -- --verbose --detectOpenHandles --forceExit
