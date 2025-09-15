@@ -21,6 +21,7 @@ import {
 import { RequireAuth } from "../../common/decorators/require-auth.decorator";
 import { Permissions } from "../../common/decorators/permissions.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
 import { RolesService } from "./roles.service";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
@@ -144,9 +145,9 @@ export class RolesController {
   async remove(
     @Param("id", ParseIntPipe) id: number,
     @CurrentUser("companyId") companyId: number
-  ): Promise<{ message: string }> {
+  ) {
     await this.rolesService.deleteRole(id, companyId);
-    return { message: "Role deleted successfully" };
+    return ResponseUtil.success(null, "Role deleted successfully");
   }
 
   // Role assignment endpoints
@@ -158,27 +159,25 @@ export class RolesController {
   async assignRole(
     @Body() assignRoleDto: AssignRoleDto,
     @CurrentUser("companyId") companyId: number
-  ): Promise<{ message: string }> {
+  ) {
     await this.rolesService.assignRoleToUser(
       assignRoleDto.userId,
       assignRoleDto.roleId,
       companyId
     );
-    return { message: "Role assigned successfully" };
+    return ResponseUtil.success(null, "Role assigned successfully");
   }
 
   @Delete("assign")
   @RequireAuth("ADMIN")
   @ApiOperation({ summary: "Remove role from user" })
   @ApiResponse({ status: 200, description: "Role removed successfully" })
-  async removeRole(
-    @Body() assignRoleDto: AssignRoleDto
-  ): Promise<{ message: string }> {
+  async removeRole(@Body() assignRoleDto: AssignRoleDto) {
     await this.rolesService.removeRoleFromUser(
       assignRoleDto.userId,
       assignRoleDto.roleId
     );
-    return { message: "Role removed successfully" };
+    return ResponseUtil.success(null, "Role removed successfully");
   }
 
   // Permission assignment endpoints
@@ -191,13 +190,13 @@ export class RolesController {
     @Param("id", ParseIntPipe) roleId: number,
     @Body() assignPermissionDto: AssignPermissionToRoleDto,
     @CurrentUser("companyId") companyId: number
-  ): Promise<{ message: string }> {
+  ) {
     await this.rolesService.addPermissionToRole(
       roleId,
       assignPermissionDto.permissionId,
       companyId
     );
-    return { message: "Permission added to role successfully" };
+    return ResponseUtil.success(null, "Permission added to role successfully");
   }
 
   @Delete(":id/permissions/:permissionId")
@@ -208,12 +207,15 @@ export class RolesController {
     @Param("id", ParseIntPipe) roleId: number,
     @Param("permissionId", ParseIntPipe) permissionId: number,
     @CurrentUser("companyId") companyId: number
-  ): Promise<{ message: string }> {
+  ) {
     await this.rolesService.removePermissionFromRole(
       roleId,
       permissionId,
       companyId
     );
-    return { message: "Permission removed from role successfully" };
+    return ResponseUtil.success(
+      null,
+      "Permission removed from role successfully"
+    );
   }
 }

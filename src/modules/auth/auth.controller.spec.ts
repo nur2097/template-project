@@ -14,6 +14,7 @@ import { EnhancedRateLimitGuard } from "../../common/guards/rate-limit.guard";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import { Request } from "express";
 
 describe("AuthController", () => {
   let controller: AuthController;
@@ -162,7 +163,7 @@ describe("AuthController", () => {
       const mockRequest = {
         ip: "127.0.0.1",
         headers: { "user-agent": "Test Browser" },
-      };
+      } as unknown as Request;
 
       authService.login.mockResolvedValue(mockAuthResponse);
 
@@ -181,7 +182,7 @@ describe("AuthController", () => {
       const mockRequest = {
         ip: "127.0.0.1",
         headers: { "user-agent": "Test Browser" },
-      };
+      } as unknown as Request;
 
       authService.login.mockRejectedValue(
         new UnauthorizedException("Invalid credentials")
@@ -206,7 +207,7 @@ describe("AuthController", () => {
       const mockRequest = {
         ip: "127.0.0.1",
         headers: { "user-agent": "Test Browser" },
-      };
+      } as unknown as Request;
 
       authService.register.mockResolvedValue(mockAuthResponse);
 
@@ -231,7 +232,7 @@ describe("AuthController", () => {
       const mockRequest = {
         ip: "127.0.0.1",
         headers: { "user-agent": "Test Browser" },
-      };
+      } as unknown as Request;
 
       authService.register.mockRejectedValue(
         new BadRequestException("User with this email already exists")
@@ -269,12 +270,21 @@ describe("AuthController", () => {
       const mockRequest = {
         headers: { authorization: "Bearer jwt-token" },
         user: mockUser,
-      };
+      } as unknown as Request;
 
       authService.logout.mockResolvedValue(undefined);
 
       const result = await controller.logout(
-        { id: 1, sub: 1, token: "jwt-token" },
+        {
+          id: 1,
+          sub: 1,
+          token: "jwt-token",
+          email: "test@example.com",
+          firstName: "Test",
+          lastName: "User",
+          systemRole: "USER",
+          companyId: 1,
+        },
         mockRequest
       );
 

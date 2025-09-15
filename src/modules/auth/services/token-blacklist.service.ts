@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger } from "@nestjs/common";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
-import { ConfigurationService } from "../../../config/configuration.service";
+import { ConfigurationService } from "@config/configuration.service";
 import { JwtService } from "@nestjs/jwt";
 
 @Injectable()

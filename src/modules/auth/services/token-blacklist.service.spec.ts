@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { JwtService } from "@nestjs/jwt";
 import { TokenBlacklistService } from "./token-blacklist.service";
-import { ConfigurationService } from "../../../config/configuration.service";
+import { ConfigurationService } from "@config/configuration.service";
 
 describe("TokenBlacklistService", () => {
   let service: TokenBlacklistService;

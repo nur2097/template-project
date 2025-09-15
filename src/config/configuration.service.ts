@@ -68,6 +68,10 @@ export class ConfigurationService {
     return this.configService.get("JWT_SECRET", { infer: true });
   }
 
+  get jwtRefreshSecret(): string {
+    return this.configService.get("JWT_REFRESH_SECRET", { infer: true });
+  }
+
   get jwtExpiresIn(): string {
     return this.configService.get("JWT_EXPIRES_IN", { infer: true });
   }

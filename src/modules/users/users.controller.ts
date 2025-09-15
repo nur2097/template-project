@@ -27,6 +27,7 @@ import {
 } from "../../common/decorators/casbin.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CacheKey, CacheTTL } from "../../common/decorators/cache.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserResponseDto } from "./dto/user-response.dto";
@@ -190,8 +191,8 @@ export class UsersController {
   async remove(
     @Param("id", ParseIntPipe) id: number,
     @CurrentUser("companyId") companyId: number
-  ): Promise<{ message: string }> {
+  ) {
     await this.usersService.remove(id, companyId);
-    return { message: "User deleted successfully" };
+    return ResponseUtil.success(null, "User deleted successfully");
   }
 }

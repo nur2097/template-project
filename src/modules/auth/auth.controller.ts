@@ -9,7 +9,9 @@ import {
   NotFoundException,
   BadRequestException,
   UseGuards,
+  Logger,
 } from "@nestjs/common";
+import { Request as ExpressRequest } from "express";
 import {
   ApiTags,
   ApiOperation,
@@ -37,7 +39,11 @@ import {
   AuthErrorResponseDto,
 } from "../../common/dto/auth-response.dto";
 import { ErrorResponseDto } from "../../common/dto/standard-response.dto";
-import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from "../../common/decorators/current-user.decorator";
 import { Public } from "../../common/decorators/public.decorator";
 import { EnhancedRateLimitGuard } from "../../common/guards/rate-limit.guard";
 import {
@@ -50,6 +56,8 @@ import {
 @ApiTags("Authentication")
 @Controller("auth")
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly passwordResetService: PasswordResetService,
@@ -88,7 +96,7 @@ export class AuthController {
   @ApiBody({ type: RegisterDto })
   async register(
     @Body() registerDto: RegisterDto,
-    @Request() req: any
+    @Request() req: ExpressRequest
   ): Promise<AuthResponseDto> {
     return this.authService.register(registerDto, req);
   }
@@ -117,7 +125,7 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   async login(
     @Body() loginDto: LoginDto,
-    @Request() req: any
+    @Request() req: ExpressRequest
   ): Promise<AuthResponseDto> {
     return this.authService.login(loginDto, req);
   }
@@ -156,7 +164,9 @@ export class AuthController {
     description: "Unauthorized",
     type: AuthErrorResponseDto,
   })
-  async getProfile(@CurrentUser() user: any): Promise<UserResponseDto> {
+  async getProfile(
+    @CurrentUser() user: CurrentUserPayload
+  ): Promise<UserResponseDto> {
     return this.authService.validateUserById(user.sub);
   }
 
@@ -175,11 +185,11 @@ export class AuthController {
     type: AuthErrorResponseDto,
   })
   async logout(
-    @CurrentUser() user: any,
-    @Request() req: any
-  ): Promise<{ message: string }> {
+    @CurrentUser() user: CurrentUserPayload,
+    @Request() req: ExpressRequest
+  ) {
     await this.authService.logout(user.sub, req, user.token);
-    return { message: "Logout successful" };
+    return ResponseUtil.success(null, "Logout successful");
   }
 
   @Post("logout-all")
@@ -191,9 +201,12 @@ export class AuthController {
     description: "Logged out from all devices successfully",
   })
   @ApiResponse({ status: 401, description: "Unauthorized" })
-  async logoutAll(@CurrentUser() user: any): Promise<{ message: string }> {
+  async logoutAll(@CurrentUser() user: CurrentUserPayload) {
     await this.authService.logoutAll(user.sub);
-    return { message: "Logged out from all devices successfully" };
+    return ResponseUtil.success(
+      null,
+      "Logged out from all devices successfully"
+    );
   }
 
   @Post("logout-other-devices")
@@ -205,12 +218,13 @@ export class AuthController {
     description: "Logged out from other devices successfully",
   })
   @ApiResponse({ status: 401, description: "Unauthorized" })
-  async logoutOtherDevices(
-    @CurrentUser() user: any
-  ): Promise<{ message: string }> {
+  async logoutOtherDevices(@CurrentUser() user: CurrentUserPayload) {
     const currentDeviceId = user.deviceId;
     await this.authService.logoutOtherDevices(user.sub, currentDeviceId);
-    return { message: "Logged out from other devices successfully" };
+    return ResponseUtil.success(
+      null,
+      "Logged out from other devices successfully"
+    );
   }
 
   @Get("devices")
@@ -218,7 +232,7 @@ export class AuthController {
   @ApiOperation({ summary: "Get user active devices and sessions" })
   @ApiResponse({ status: 200, description: "Devices retrieved successfully" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
-  async getDevices(@CurrentUser() user: any): Promise<any> {
+  async getDevices(@CurrentUser() user: CurrentUserPayload) {
     const devices = await this.authService.getUserActiveSessions(user.sub);
     return { devices };
   }
@@ -233,11 +247,11 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async revokeDevice(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserPayload,
     @Body() body: { deviceId: string }
-  ): Promise<{ message: string }> {
+  ) {
     await this.authService.revokeDeviceAccess(user.sub, body.deviceId);
-    return { message: "Device access revoked successfully" };
+    return ResponseUtil.success(null, "Device access revoked successfully");
   }
 
   @Public()
@@ -251,26 +265,33 @@ export class AuthController {
   @ApiBody({
     schema: { type: "object", properties: { email: { type: "string" } } },
   })
-  async forgotPassword(
-    @Body() body: { email: string }
-  ): Promise<{ message: string }> {
+  async forgotPassword(@Body() body: { email: string }) {
     const resetToken = await this.passwordResetService.generateResetToken(
       body.email
     );
 
-    // TODO: Send reset token via email to user
-    // await this.emailService.sendPasswordResetEmail(body.email, resetToken);
+    // Send reset token via email to user
+    try {
+      await this.emailService.sendPasswordResetEmail(body.email, resetToken);
+    } catch (error) {
+      // Log error but don't expose it to user for security
+      console.error("Failed to send password reset email:", error);
+      // Still return success to prevent email enumeration attacks
+    }
 
     // For development: log token to console (remove in production)
     if (this.configService.isDevelopment) {
-      console.log(`🔑 Password reset token for ${body.email}: ${resetToken}`);
+      // Use logger instead of console for better control
+      this.logger.debug(
+        `🔑 Password reset token for ${body.email}: ${resetToken}`
+      );
     }
 
     // SECURITY: Never return the reset token in response (even in development)
-    return {
-      message:
-        "If the email exists, password reset instructions have been sent",
-    };
+    return ResponseUtil.success(
+      null,
+      "If the email exists, password reset instructions have been sent"
+    );
   }
 
   @Public()
@@ -288,11 +309,9 @@ export class AuthController {
       },
     },
   })
-  async resetPassword(
-    @Body() body: { token: string; newPassword: string }
-  ): Promise<{ message: string }> {
+  async resetPassword(@Body() body: { token: string; newPassword: string }) {
     await this.passwordResetService.resetPassword(body.token, body.newPassword);
-    return { message: "Password reset successfully" };
+    return ResponseUtil.success(null, "Password reset successfully");
   }
 
   @Post("change-password")
@@ -314,13 +333,13 @@ export class AuthController {
   async changePassword(
     @CurrentUser("id") userId: number,
     @Body() body: { currentPassword: string; newPassword: string }
-  ): Promise<{ message: string }> {
+  ) {
     await this.passwordResetService.changePassword(
       userId,
       body.currentPassword,
       body.newPassword
     );
-    return { message: "Password changed successfully" };
+    return ResponseUtil.success(null, "Password changed successfully");
   }
 
   @Public()
@@ -342,7 +361,7 @@ export class AuthController {
   })
   async sendVerificationEmail(
     @Body() body: { email: string; companySlug?: string }
-  ): Promise<{ message: string; verificationToken?: string }> {
+  ) {
     // Find user by email
     const user = await this.usersService.findByEmail(body.email);
     if (!user) {
@@ -350,7 +369,7 @@ export class AuthController {
     }
 
     if (user.emailVerified) {
-      return { message: "Email already verified" };
+      return ResponseUtil.success(null, "Email already verified");
     }
 
     // Optional: Verify company slug matches (additional security)
@@ -372,9 +391,10 @@ export class AuthController {
     );
 
     // SECURITY: Never return verification token in response (even in development)
-    return {
-      message: "If the email is valid, a verification link has been sent",
-    };
+    return ResponseUtil.success(
+      null,
+      "If the email is valid, a verification link has been sent"
+    );
   }
 
   @Public()
@@ -395,7 +415,7 @@ export class AuthController {
   })
   async verifyEmail(
     @Body() body: { email: string; token: string; companySlug?: string }
-  ): Promise<{ message: string }> {
+  ) {
     // Find user by email
     const user = await this.usersService.findByEmail(body.email);
     if (!user) {
@@ -403,7 +423,7 @@ export class AuthController {
     }
 
     if (user.emailVerified) {
-      return { message: "Email already verified" };
+      return ResponseUtil.success(null, "Email already verified");
     }
 
     // Optional: Verify company slug matches (additional security)
@@ -417,6 +437,6 @@ export class AuthController {
     // Verify token and email
     await this.emailVerificationService.verifyToken(body.token, body.email);
 
-    return { message: "Email verified successfully" };
+    return ResponseUtil.success(null, "Email verified successfully");
   }
 }

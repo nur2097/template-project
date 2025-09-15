@@ -91,6 +91,14 @@ export const envSchema = z.object({
     })
     .describe("JWT signing secret key"),
 
+  JWT_REFRESH_SECRET: z
+    .string()
+    .min(32, {
+      message:
+        "JWT_REFRESH_SECRET must be at least 32 characters long for security",
+    })
+    .describe("JWT refresh token signing secret key"),
+
   JWT_EXPIRES_IN: z
     .string()
     .regex(/^(\d+[smhd]|\d+)$/, {
@@ -268,14 +276,15 @@ export function validateEnvironment(): Environment {
     // Parse and validate environment variables
     const parsed = envSchema.parse(process.env);
 
-    console.log("✅ Environment variables validated successfully");
+    // Environment validation completed - logging will be handled by the application logger
+    // Note: No console.log here as this runs before the application logger is initialized
 
-    // Log some non-sensitive config info in development
+    // In development, we can use console for initial setup info only
     if (parsed.NODE_ENV === "development") {
+      // These are safe for development startup logging
+      console.log("✅ Environment variables validated successfully");
       console.log(`🚀 Server will run on port: ${parsed.PORT}`);
       console.log(`📊 API prefix: /${parsed.API_PREFIX}`);
-      console.log(`📝 Log level: ${parsed.LOG_LEVEL}`);
-      console.log(`📚 Swagger enabled: ${parsed.SWAGGER_ENABLED}`);
     }
 
     return parsed;

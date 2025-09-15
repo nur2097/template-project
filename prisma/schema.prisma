@@ -46,6 +46,7 @@ model Company {
   permissions   Permission[]
   devices       Device[]
   refreshTokens RefreshToken[]
+  invitations   CompanyInvitation[]
 
   @@map("companies")
 }
@@ -178,12 +179,13 @@ model User {
   deletedAt         DateTime?      @map("deleted_at")
 
   // Relations
-  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  roles          UserRole[]      @relation("UserRoles")
-  sessions       UserSession[]   @relation("UserSessions")
-  devices        Device[]        @relation("UserDevices")
-  refreshTokens  RefreshToken[]  @relation("UserRefreshTokens")
-  passwordResets PasswordReset[] @relation("UserPasswordResets")
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roles          UserRole[]          @relation("UserRoles")
+  sessions       UserSession[]       @relation("UserSessions")
+  devices        Device[]            @relation("UserDevices")
+  refreshTokens  RefreshToken[]      @relation("UserRefreshTokens")
+  passwordResets PasswordReset[]     @relation("UserPasswordResets")
+  createdInvitations CompanyInvitation[] @relation("InvitationCreatedBy")
 
   @@map("users")
 }
@@ -215,6 +217,36 @@ model UserSession {
   user User @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_sessions")
+}
+
+// Company Invitation Model
+model CompanyInvitation {
+  id           Int                      @id @default(autoincrement())
+  email        String
+  code         String                   @unique
+  role         SystemUserRole          @default(USER)
+  status       CompanyInvitationStatus @default(PENDING)
+  invitedBy    Int                     @map("invited_by")
+  companyId    Int                     @map("company_id")
+  expiresAt    DateTime                @map("expires_at")
+  acceptedAt   DateTime?               @map("accepted_at")
+  rejectedAt   DateTime?               @map("rejected_at")
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+
+  // Relations
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inviter    User    @relation("InvitationCreatedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@unique([email, companyId])
+  @@map("company_invitations")
+}
+
+enum CompanyInvitationStatus {
+  PENDING
+  ACCEPTED  
+  REJECTED
+  EXPIRED
 }
 
 // Rate Limiting Model

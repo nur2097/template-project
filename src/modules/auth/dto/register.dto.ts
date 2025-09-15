@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsString, IsOptional, IsNotEmpty } from "class-validator";
-import { BaseUserDto } from "../../../common/dto/base-user.dto";
+import { BaseUserDto } from "@common/dto/base-user.dto";
 
 export class RegisterDto extends BaseUserDto {
   // Company joining - REQUIRED (one must be provided)

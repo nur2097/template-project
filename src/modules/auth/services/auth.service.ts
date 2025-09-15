@@ -1,19 +1,20 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigurationService } from "../../../config/configuration.service";
-import { PasswordUtil } from "../../../common/utils/password.util";
-import { PersonalInfo } from "../../../common/utils/password-policy.util";
+import { PrismaService } from "@shared/database/prisma.service";
+import { ConfigurationService } from "@config/configuration.service";
+import { PasswordUtil } from "@common/utils/password.util";
+import { PersonalInfo } from "@common/utils/password-policy.util";
 import { UsersService } from "../../users/users.service";
 import { RefreshTokenService } from "./refresh-token.service";
 import { DeviceService } from "./device.service";
 import { TokenBlacklistService } from "./token-blacklist.service";
-import { SanitizerUtil } from "../../../common/utils/sanitizer.util";
+import { SanitizerUtil } from "@common/utils/sanitizer.util";
 import {
   InvalidCredentialsException,
   RefreshTokenNotFoundException,
   AccountNotVerifiedException,
   InvalidCompanyInvitationException,
-} from "../../../common/exceptions";
+} from "@common/exceptions";
 import { CreateUserDto } from "../../users/dto/create-user.dto";
 import { UserResponseDto } from "../../users/dto/user-response.dto";
 import { LoginDto } from "../dto/login.dto";
@@ -21,7 +22,6 @@ import { RegisterDto } from "../dto/register.dto";
 import { AuthResponseDto } from "../dto/auth-response.dto";
 import { CompaniesService } from "../../companies/companies.service";
 import { SystemUserRole } from "@prisma/client";
-import { Request } from "express";
 
 export interface TokenPayload {
   sub: number;
@@ -48,12 +48,13 @@ export class AuthService {
     private readonly refreshTokenService: RefreshTokenService,
     private readonly deviceService: DeviceService,
     private readonly tokenBlacklistService: TokenBlacklistService,
-    private readonly companiesService: CompaniesService
+    private readonly companiesService: CompaniesService,
+    private readonly prismaService: PrismaService
   ) {}
 
   async register(
     registerDto: RegisterDto,
-    request: Request
+    request: any
   ): Promise<AuthResponseDto> {
     // Find company by slug
     const company = await this.companiesService.findBySlug(
@@ -116,7 +117,7 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto, request: Request): Promise<AuthResponseDto> {
+  async login(loginDto: LoginDto, request: any): Promise<AuthResponseDto> {
     const user = await this.validateUser(loginDto.email, loginDto.password);
 
     const deviceInfo = this.deviceService.extractDeviceInfo(request);
@@ -168,7 +169,7 @@ export class AuthService {
 
   async logout(
     userId: number,
-    request?: Request,
+    request?: any,
     currentToken?: string
   ): Promise<void> {
     if (currentToken) {
@@ -331,7 +332,6 @@ export class AuthService {
 
   /**
    * Validate invitation code for company registration
-   * TODO: Implement proper invitation system with database table
    */
   private async validateInvitationCode(
     companyId: number,
@@ -341,14 +341,46 @@ export class AuthService {
       `Validating invitation code for company ${companyId}: ${invitationCode}`
     );
 
-    // For now, accept any invitation code in development
-    // In production, this should validate against a real invitation system
-    if (process.env.NODE_ENV === "development") {
-      this.logger.debug("Development mode: accepting any invitation code");
-      return;
+    // Find invitation by code
+    const invitation = await this.prismaService.companyInvitation.findUnique({
+      where: { code: invitationCode },
+      include: { company: true },
+    });
+
+    // Check if invitation exists
+    if (!invitation) {
+      throw new InvalidCompanyInvitationException(invitationCode);
     }
 
-    // TODO: Implement real invitation validation
-    throw new InvalidCompanyInvitationException(invitationCode);
+    // Check if invitation belongs to the right company
+    if (invitation.companyId !== companyId) {
+      throw new InvalidCompanyInvitationException(invitationCode);
+    }
+
+    // Check if invitation is still pending
+    if (invitation.status !== "PENDING") {
+      throw new InvalidCompanyInvitationException(invitationCode);
+    }
+
+    // Check if invitation has expired
+    if (invitation.expiresAt < new Date()) {
+      // Mark as expired
+      await this.prismaService.companyInvitation.update({
+        where: { id: invitation.id },
+        data: { status: "EXPIRED" },
+      });
+      throw new InvalidCompanyInvitationException(invitationCode);
+    }
+
+    // Mark invitation as accepted
+    await this.prismaService.companyInvitation.update({
+      where: { id: invitation.id },
+      data: {
+        status: "ACCEPTED",
+        acceptedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`Invitation code ${invitationCode} validated successfully`);
   }
 }

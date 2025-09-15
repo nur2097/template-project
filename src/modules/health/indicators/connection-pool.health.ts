@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { HealthIndicator, HealthIndicatorResult } from "@nestjs/terminus";
-import { PrismaService } from "../../../shared/database/prisma.service";
-import { RedisService } from "../../../shared/cache/redis.service";
+import { PrismaService } from "@shared/database/prisma.service";
+import { RedisService } from "@shared/cache/redis.service";
 
 export interface ConnectionPoolStats {
   total: number;

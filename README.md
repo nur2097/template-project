@@ -28,10 +28,10 @@ A production-ready, enterprise-grade NestJS API template with comprehensive logg
 git clone https://github.com/your-repo/nestjs-enterprise-template.git
 cd nestjs-enterprise-template
 cp .env.example .env
-docker-compose up -d --build
+npm run docker:up
 
 # Access the API
-curl http://localhost:3000/api/v1/health/liveness
+curl http://localhost:3000/api/health
 ```
 
 ### **🏃‍♂️ Manual Setup**
@@ -43,10 +43,10 @@ npm install
 cp .env.example .env
 
 # Start infrastructure
-docker-compose up -d postgres mongodb redis
+npm run docker:up
 
 # Setup database
-npm run db:migrate
+npm run db:push
 npm run db:seed
 
 # Start application

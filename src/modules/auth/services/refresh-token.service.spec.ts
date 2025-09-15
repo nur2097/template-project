@@ -1,10 +1,10 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { RefreshTokenService } from "./refresh-token.service";
-import { PrismaService } from "../../../shared/database/prisma.service";
-import { CacheService } from "../../../shared/cache/cache.service";
-import { RedisService } from "../../../shared/cache/redis.service";
+import { PrismaService } from "@shared/database/prisma.service";
+import { CacheService } from "@shared/cache/cache.service";
+import { RedisService } from "@shared/cache/redis.service";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigurationService } from "../../../config/configuration.service";
+import { ConfigurationService } from "@config/configuration.service";
 
 describe("RefreshTokenService", () => {
   let service: RefreshTokenService;

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../../shared/database/prisma.service";
-import { RedisService } from "../../../shared/cache/redis.service";
+import { PrismaService } from "@shared/database/prisma.service";
+import { RedisService } from "@shared/cache/redis.service";
 import { Request } from "express";
 import * as crypto from "crypto";
 

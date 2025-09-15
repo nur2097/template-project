@@ -21,6 +21,7 @@ import {
   CanReadFiles,
 } from "../../common/decorators/casbin.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
 import {
   UploadService,
   UploadedFile as CustomUploadedFile,
@@ -59,10 +60,7 @@ export class UploadController {
       throw new BadRequestException(result.error);
     }
 
-    return {
-      message: "File uploaded successfully",
-      ...result,
-    };
+    return ResponseUtil.success(result, "File uploaded successfully");
   }
 
   @Post("multiple")
@@ -91,12 +89,14 @@ export class UploadController {
     const successful = results.filter((r) => r.success);
     const failed = results.filter((r) => !r.success);
 
-    return {
-      message: `${successful.length} files uploaded successfully, ${failed.length} failed`,
-      successful,
-      failed,
-      total: files.length,
-    };
+    return ResponseUtil.success(
+      {
+        successful,
+        failed,
+        total: files.length,
+      },
+      `${successful.length} files uploaded successfully, ${failed.length} failed`
+    );
   }
 
   @Post("avatar")
@@ -132,10 +132,7 @@ export class UploadController {
       throw new BadRequestException(result.error);
     }
 
-    return {
-      message: "Avatar uploaded successfully",
-      ...result,
-    };
+    return ResponseUtil.success(result, "Avatar uploaded successfully");
   }
 
   @Get("info/:folder/:filename")
@@ -153,15 +150,17 @@ export class UploadController {
       throw new BadRequestException("File not found");
     }
 
-    return {
-      message: "File information retrieved",
-      filename,
-      folder,
-      url: fileInfo.url,
-      size: fileInfo.stats?.size,
-      createdAt: fileInfo.stats?.birthtime,
-      modifiedAt: fileInfo.stats?.mtime,
-    };
+    return ResponseUtil.success(
+      {
+        filename,
+        folder,
+        url: fileInfo.url,
+        size: fileInfo.stats?.size,
+        createdAt: fileInfo.stats?.birthtime,
+        modifiedAt: fileInfo.stats?.mtime,
+      },
+      "File information retrieved"
+    );
   }
 
   @Get("config")
@@ -169,13 +168,15 @@ export class UploadController {
   @ApiOperation({ summary: "Get upload configuration" })
   @ApiResponse({ status: 200, description: "Upload configuration retrieved" })
   async getUploadConfig() {
-    return {
-      maxFileSize: this.uploadService.getMaxFileSize(),
-      maxFileSizeMB: Math.round(
-        this.uploadService.getMaxFileSize() / 1024 / 1024
-      ),
-      allowedFileTypes: this.uploadService.getAllowedFileTypes(),
-      message: "Upload configuration retrieved successfully",
-    };
+    return ResponseUtil.success(
+      {
+        maxFileSize: this.uploadService.getMaxFileSize(),
+        maxFileSizeMB: Math.round(
+          this.uploadService.getMaxFileSize() / 1024 / 1024
+        ),
+        allowedFileTypes: this.uploadService.getAllowedFileTypes(),
+      },
+      "Upload configuration retrieved successfully"
+    );
   }
 }

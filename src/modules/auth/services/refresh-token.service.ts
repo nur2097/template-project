@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { PrismaService } from "../../../shared/database/prisma.service";
-import { RedisService } from "../../../shared/cache/redis.service";
+import { PrismaService } from "@shared/database/prisma.service";
+import { RedisService } from "@shared/cache/redis.service";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigurationService } from "../../../config/configuration.service";
-import { CryptoUtil } from "../../../common/utils/crypto.util";
+import { ConfigurationService } from "@config/configuration.service";
+import { CryptoUtil } from "@common/utils/crypto.util";
 import * as crypto from "crypto";
 
 @Injectable()

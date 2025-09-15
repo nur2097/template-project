@@ -1,5 +1,5 @@
 import { Injectable, Logger, BadRequestException } from "@nestjs/common";
-import { CacheService } from "../../../shared/cache/cache.service";
+import { CacheService } from "@shared/cache/cache.service";
 import { CryptoUtil } from "../../../common/utils/crypto.util";
 import { UsersService } from "../../users/users.service";
 

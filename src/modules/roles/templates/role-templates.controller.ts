@@ -19,6 +19,7 @@ import { RoleTemplatesService } from "./role-templates.service";
 import { RolesService } from "../roles.service";
 import { RequireAuth } from "../../../common/decorators/require-auth.decorator";
 import { CurrentUser } from "../../../common/decorators/current-user.decorator";
+import { ResponseUtil } from "../../../common/utils/response.util";
 import { CacheKey, CacheTTL } from "../../../common/decorators/cache.decorator";
 import {
   ApplyRoleTemplateDto,
@@ -59,7 +60,7 @@ export class RoleTemplatesController {
       templates = this.roleTemplatesService.getTemplatesByCategory(category);
     }
 
-    return templates.map((template) => ({
+    const templatesData = templates.map((template) => ({
       name: template.name,
       description: template.description,
       systemRole: template.systemRole,
@@ -71,6 +72,11 @@ export class RoleTemplatesController {
       ],
       permissions: template.permissions,
     }));
+
+    return ResponseUtil.success(
+      templatesData,
+      "Role templates retrieved successfully"
+    );
   }
 
   @Get("categories")
@@ -96,7 +102,10 @@ export class RoleTemplatesController {
     const templates = this.roleTemplatesService.getAvailableTemplates();
     const categories = [...new Set(templates.map((t) => t.category))];
 
-    return { categories };
+    return ResponseUtil.success(
+      { categories },
+      "Template categories retrieved successfully"
+    );
   }
 
   @Get("permissions/categories")
@@ -113,11 +122,18 @@ export class RoleTemplatesController {
   async getPermissionCategories() {
     const categories = this.roleTemplatesService.getPermissionCategories();
 
-    return Object.entries(categories).map(([category, permissions]) => ({
-      category,
-      count: permissions.length,
-      permissions,
-    }));
+    const categoriesData = Object.entries(categories).map(
+      ([category, permissions]) => ({
+        category,
+        count: permissions.length,
+        permissions,
+      })
+    );
+
+    return ResponseUtil.success(
+      categoriesData,
+      "Permission categories retrieved successfully"
+    );
   }
 
   @Get("recommended")
@@ -180,10 +196,13 @@ export class RoleTemplatesController {
         permissions: template.permissions,
       }));
 
-    return {
-      recommended,
-      templates,
-    };
+    return ResponseUtil.success(
+      {
+        recommended,
+        templates,
+      },
+      "Recommended templates retrieved successfully"
+    );
   }
 
   @Post("apply")
@@ -281,13 +300,15 @@ export class RoleTemplatesController {
       }
     }
 
-    return {
-      message: "Role created from template successfully",
-      role,
-      appliedTemplate: applyDto.templateName,
-      permissionsCreated,
-      permissionsAssigned,
-    };
+    return ResponseUtil.success(
+      {
+        role,
+        appliedTemplate: applyDto.templateName,
+        permissionsCreated,
+        permissionsAssigned,
+      },
+      "Role created from template successfully"
+    );
   }
 
   @Post("bulk-apply")
@@ -342,11 +363,11 @@ export class RoleTemplatesController {
 
         success.push({
           template: templateName,
-          roleId: result.role.id,
-          roleName: result.role.name,
+          roleId: result.data.role.id,
+          roleName: result.data.role.name,
         });
 
-        totalPermissionsCreated += result.permissionsCreated;
+        totalPermissionsCreated += result.data.permissionsCreated;
       } catch (error) {
         failed.push({
           template: templateName,
@@ -355,10 +376,13 @@ export class RoleTemplatesController {
       }
     }
 
-    return {
-      success,
-      failed,
-      totalPermissionsCreated,
-    };
+    return ResponseUtil.success(
+      {
+        success,
+        failed,
+        totalPermissionsCreated,
+      },
+      `Applied ${success.length} templates successfully, ${failed.length} failed`
+    );
   }
 }

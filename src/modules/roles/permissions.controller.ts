@@ -22,6 +22,7 @@ import {
 import { Permissions } from "../../common/decorators/permissions.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CacheKey, CacheTTL } from "../../common/decorators/cache.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
 import { RolesService } from "./roles.service";
 import { CreatePermissionDto } from "./dto/create-permission.dto";
 import { UpdatePermissionDto } from "./dto/update-permission.dto";
@@ -332,9 +333,9 @@ export class PermissionsController {
     @Param("id", ParseIntPipe) id: number,
     @CurrentUser("companyId") companyId: number,
     @Query("force") force?: boolean
-  ): Promise<{ message: string }> {
+  ) {
     await this.rolesService.deletePermission(id, companyId, force);
-    return { message: "Permission deleted successfully" };
+    return ResponseUtil.success(null, "Permission deleted successfully");
   }
 
   @Put(":id/clone")

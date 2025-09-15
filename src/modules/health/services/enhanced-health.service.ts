@@ -3,7 +3,7 @@ import { HealthService } from "../health.service";
 import { ExternalApiHealthIndicator } from "../indicators/external-api.health";
 import { ConnectionPoolHealthIndicator } from "../indicators/connection-pool.health";
 import { HealthAlertingService, HealthAlert } from "./health-alerting.service";
-import { CacheService } from "../../../shared/cache/cache.service";
+import { CacheService } from "@shared/cache/cache.service";
 
 export interface EnhancedHealthReport {
   status: "healthy" | "unhealthy" | "degraded";

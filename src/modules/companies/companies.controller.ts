@@ -29,6 +29,7 @@ import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyResponseDto } from "./dto/company-response.dto";
 import { RequireAuth } from "../../common/decorators/require-auth.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
 import { CacheKey, CacheTTL } from "../../common/decorators/cache.decorator";
 import { Public } from "../../common/decorators/public.decorator";
 
@@ -234,11 +235,9 @@ export class CompaniesController {
   @ApiResponse({ status: 200, description: "Company deleted successfully" })
   @ApiResponse({ status: 404, description: "Company not found" })
   @ApiResponse({ status: 400, description: "Cannot delete company with users" })
-  async remove(
-    @Param("id", ParseIntPipe) id: number
-  ): Promise<{ message: string }> {
+  async remove(@Param("id", ParseIntPipe) id: number) {
     await this.companiesService.remove(id);
-    return { message: "Company deleted successfully" };
+    return ResponseUtil.success(null, "Company deleted successfully");
   }
 
   @Get(":id/users")

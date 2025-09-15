@@ -6,6 +6,7 @@ import {
   ApiBearerAuth,
 } from "@nestjs/swagger";
 import { RequireAuth } from "../../common/decorators/require-auth.decorator";
+import { ResponseUtil } from "../../common/utils/response.util";
 import { EmailService, SendEmailDto } from "./email.service";
 
 @ApiTags("Email")
@@ -23,18 +24,13 @@ export class EmailController {
     const result = await this.emailService.sendEmail(sendEmailDto);
 
     if (!result.success) {
-      return {
-        success: false,
-        message: "Failed to send email",
-        error: result.error,
-      };
+      return ResponseUtil.warning(null, "Failed to send email", [result.error]);
     }
 
-    return {
-      success: true,
-      message: "Email sent successfully",
-      messageId: result.messageId,
-    };
+    return ResponseUtil.success(
+      { messageId: result.messageId },
+      "Email sent successfully"
+    );
   }
 
   @Get("test-connection")
@@ -44,14 +40,15 @@ export class EmailController {
   async testConnection() {
     const isConnected = await this.emailService.testEmailConnection();
 
-    return {
-      success: isConnected,
-      connected: isConnected,
-      message: isConnected
+    return ResponseUtil.success(
+      {
+        connected: isConnected,
+        timestamp: new Date().toISOString(),
+      },
+      isConnected
         ? "Email service is connected"
-        : "Email service connection failed",
-      timestamp: new Date().toISOString(),
-    };
+        : "Email service connection failed"
+    );
   }
 
   @Post("welcome")
@@ -64,14 +61,16 @@ export class EmailController {
       data.name
     );
 
-    return {
-      success: result.success,
-      message: result.success
-        ? "Welcome email sent"
-        : "Failed to send welcome email",
-      messageId: result.messageId,
-      error: result.error,
-    };
+    if (!result.success) {
+      return ResponseUtil.warning(null, "Failed to send welcome email", [
+        result.error,
+      ]);
+    }
+
+    return ResponseUtil.success(
+      { messageId: result.messageId },
+      "Welcome email sent"
+    );
   }
 
   @Post("password-reset")
@@ -86,14 +85,16 @@ export class EmailController {
       data.resetToken
     );
 
-    return {
-      success: result.success,
-      message: result.success
-        ? "Password reset email sent"
-        : "Failed to send password reset email",
-      messageId: result.messageId,
-      error: result.error,
-    };
+    if (!result.success) {
+      return ResponseUtil.warning(null, "Failed to send password reset email", [
+        result.error,
+      ]);
+    }
+
+    return ResponseUtil.success(
+      { messageId: result.messageId },
+      "Password reset email sent"
+    );
   }
 
   @Post("verify-email")
@@ -108,13 +109,15 @@ export class EmailController {
       data.verificationToken
     );
 
-    return {
-      success: result.success,
-      message: result.success
-        ? "Verification email sent"
-        : "Failed to send verification email",
-      messageId: result.messageId,
-      error: result.error,
-    };
+    if (!result.success) {
+      return ResponseUtil.warning(null, "Failed to send verification email", [
+        result.error,
+      ]);
+    }
+
+    return ResponseUtil.success(
+      { messageId: result.messageId },
+      "Verification email sent"
+    );
   }
 }

@@ -1,9 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsEmail, IsNotEmpty, IsString, MinLength } from "class-validator";
-import {
-  SanitizeText,
-  Trim,
-} from "../../../common/decorators/sanitize.decorator";
+import { SanitizeText, Trim } from "@common/decorators/sanitize.decorator";
 
 export class LoginDto {
   @ApiProperty({

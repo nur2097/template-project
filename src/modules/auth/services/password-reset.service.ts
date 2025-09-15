@@ -3,7 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from "@nestjs/common";
-import { PrismaService } from "../../../shared/database/prisma.service";
+import { PrismaService } from "@shared/database/prisma.service";
 import { ConfigService } from "@nestjs/config";
 import { CryptoUtil } from "../../../common/utils/crypto.util";
 import { PasswordUtil } from "../../../common/utils/password.util";

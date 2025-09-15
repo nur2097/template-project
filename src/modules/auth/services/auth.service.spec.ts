@@ -2,11 +2,12 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AuthService } from "./auth.service";
 import { UsersService } from "../../users/users.service";
 import { JwtService } from "@nestjs/jwt";
-import { ConfigurationService } from "../../../config/configuration.service";
+import { ConfigurationService } from "@config/configuration.service";
 import { RefreshTokenService } from "./refresh-token.service";
 import { DeviceService } from "./device.service";
 import { TokenBlacklistService } from "./token-blacklist.service";
 import { CompaniesService } from "../../companies/companies.service";
+import { PrismaService } from "@shared/database/prisma.service";
 
 describe("AuthService", () => {
   let service: AuthService;
@@ -73,6 +74,15 @@ describe("AuthService", () => {
           provide: CompaniesService,
           useValue: {
             findBySlug: jest.fn(),
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            companyInvitation: {
+              findUnique: jest.fn(),
+              update: jest.fn(),
+            },
           },
         },
       ],

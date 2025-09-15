@@ -1,7 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { ValidationPipe, VersioningType } from "@nestjs/common";
+import { ValidationPipe, VersioningType, Logger } from "@nestjs/common";
 import * as compression from "compression";
 import helmet from "helmet";
 import { NestLoggerWrapper } from "./common/logger/nest-logger-wrapper";
@@ -109,11 +109,14 @@ async function bootstrap() {
       .addTag("Authentication", "User authentication and authorization")
       .addTag("Users", "User management operations")
       .addTag("Companies", "Multi-tenant company management")
-      .addTag("Roles & Permissions", "Role-based access control")
+      .addTag("Roles", "Role management and assignment")
+      .addTag("Role Templates", "Pre-configured role templates")
+      .addTag("Permissions", "Permission management and control")
       .addTag("Health", "System health monitoring")
       .addTag("Enhanced Health", "Advanced health monitoring with alerting")
       .addTag("Email", "Email service operations")
       .addTag("Upload", "File upload operations")
+      .addTag("Logger", "Application logging and monitoring")
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
@@ -146,17 +149,21 @@ async function bootstrap() {
   const port = configService.port;
   await app.listen(port);
 
-  console.log(`🚀 Application is running on: http://localhost:${port}`);
-  console.log(`📊 Environment: ${configService.nodeEnv}`);
-  console.log(`📝 Log Level: ${configService.logLevel}`);
+  // Use proper logger for startup messages
+  const logger = new Logger("Bootstrap");
+  logger.log(`🚀 Application is running on: http://localhost:${port}`);
+  logger.log(`📊 Environment: ${configService.nodeEnv}`);
+  logger.log(`📝 Log Level: ${configService.logLevel}`);
   if (configService.swaggerEnabled) {
-    console.log(
+    logger.log(
       `📚 Swagger documentation: http://localhost:${port}/${configService.apiPrefix}/docs`
     );
   }
 }
 
 bootstrap().catch((err) => {
-  console.error("❌ Error starting server:", err);
+  // Create a basic logger for bootstrap errors since app might not be initialized
+  const logger = new Logger("Bootstrap");
+  logger.error("❌ Error starting server:", err);
   process.exit(1);
 });

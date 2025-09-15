@@ -25,7 +25,7 @@ export const CasbinAction = (action: string) =>
 export const CasbinPermission = (resource: string, action: string) => {
   return function (
     target: any,
-    propertyName?: string,
+    propertyName?: string | symbol,
     descriptor?: PropertyDescriptor
   ) {
     SetMetadata(CASBIN_RESOURCE_KEY, resource)(
