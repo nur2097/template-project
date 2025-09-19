@@ -18,18 +18,18 @@ import { APP_GUARD } from "@nestjs/core";
           },
           {
             name: "short",
-            ttl: parseInt(process.env.THROTTLE_TTL_SHORT) || 60000, // 1 minute
-            limit: parseInt(process.env.THROTTLE_LIMIT_SHORT) || 20, // 20 requests per minute
+            ttl: configurationService.throttleTtlShort,
+            limit: configurationService.throttleLimitShort,
           },
           {
             name: "medium",
-            ttl: parseInt(process.env.THROTTLE_TTL_MEDIUM) || 300000, // 5 minutes
-            limit: parseInt(process.env.THROTTLE_LIMIT_MEDIUM) || 100, // 100 requests per 5 minutes
+            ttl: configurationService.throttleTtlMedium,
+            limit: configurationService.throttleLimitMedium,
           },
           {
             name: "long",
-            ttl: parseInt(process.env.THROTTLE_TTL_LONG) || 3600000, // 1 hour
-            limit: parseInt(process.env.THROTTLE_LIMIT_LONG) || 500, // 500 requests per hour
+            ttl: configurationService.throttleTtlLong,
+            limit: configurationService.throttleLimitLong,
           },
         ],
       }),

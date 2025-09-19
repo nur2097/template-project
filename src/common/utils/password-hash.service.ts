@@ -1,4 +1,6 @@
+import { Injectable } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
+import { ConfigurationService } from "../../config/configuration.service";
 import {
   PasswordPolicyUtil,
   PasswordPolicyOptions,
@@ -7,21 +9,24 @@ import {
 } from "./password-policy.util";
 import { BadRequestException } from "@nestjs/common";
 
-export class PasswordUtil {
-  private static readonly SALT_ROUNDS = 12; // Use secure default
+@Injectable()
+export class PasswordHashService {
+  constructor(private readonly configService: ConfigurationService) {}
 
-  static async hash(password: string): Promise<string> {
-    return bcrypt.hash(password, this.SALT_ROUNDS);
+  private getSaltRounds(): number {
+    return this.configService.bcryptRounds || 12; // Default to 12 for production security
   }
 
-  static async compare(
-    password: string,
-    hashedPassword: string
-  ): Promise<boolean> {
+  async hash(password: string): Promise<string> {
+    const saltRounds = this.getSaltRounds();
+    return bcrypt.hash(password, saltRounds);
+  }
+
+  async compare(password: string, hashedPassword: string): Promise<boolean> {
     return bcrypt.compare(password, hashedPassword);
   }
 
-  static async isValidPassword(
+  async isValidPassword(
     password: string,
     hashedPassword: string
   ): Promise<boolean> {
@@ -31,7 +36,7 @@ export class PasswordUtil {
   /**
    * Validate password against policy and throw exception if invalid
    */
-  static validatePassword(
+  validatePassword(
     password: string,
     policy?: PasswordPolicyOptions,
     personalInfo?: PersonalInfo
@@ -56,7 +61,7 @@ export class PasswordUtil {
   /**
    * Check password strength without throwing exception
    */
-  static checkPasswordStrength(
+  checkPasswordStrength(
     password: string,
     policy?: PasswordPolicyOptions,
     personalInfo?: PersonalInfo
@@ -72,10 +77,25 @@ export class PasswordUtil {
   /**
    * Generate secure password
    */
-  static generateSecurePassword(
+  generateSecurePassword(
     length?: number,
     policy?: PasswordPolicyOptions
   ): string {
     return PasswordPolicyUtil.generate(length, policy);
+  }
+
+  /**
+   * Hash password with validation
+   */
+  async hashPasswordWithValidation(
+    password: string,
+    policy?: PasswordPolicyOptions,
+    personalInfo?: PersonalInfo
+  ): Promise<string> {
+    // Validate password first
+    this.validatePassword(password, policy, personalInfo);
+
+    // Hash the password
+    return this.hash(password);
   }
 }

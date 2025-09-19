@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import { HealthIndicator, HealthIndicatorResult } from "@nestjs/terminus";
-import { ConfigurationService } from "../../../config";
 import axios, { AxiosError } from "axios";
 
 export interface ExternalApiConfig {
@@ -15,7 +14,7 @@ export interface ExternalApiConfig {
 
 @Injectable()
 export class ExternalApiHealthIndicator extends HealthIndicator {
-  constructor(private readonly configService: ConfigurationService) {
+  constructor() {
     super();
   }
 

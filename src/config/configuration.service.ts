@@ -177,6 +177,36 @@ export class ConfigurationService {
     return this.configService.get("CACHE_MAX_ITEMS", { infer: true });
   }
 
+  // Advanced Rate Limiting Configuration
+  get throttleTtlShort(): number {
+    return this.configService.get("THROTTLE_TTL_SHORT", { infer: true });
+  }
+
+  get throttleLimitShort(): number {
+    return this.configService.get("THROTTLE_LIMIT_SHORT", { infer: true });
+  }
+
+  get throttleTtlMedium(): number {
+    return this.configService.get("THROTTLE_TTL_MEDIUM", { infer: true });
+  }
+
+  get throttleLimitMedium(): number {
+    return this.configService.get("THROTTLE_LIMIT_MEDIUM", { infer: true });
+  }
+
+  get throttleTtlLong(): number {
+    return this.configService.get("THROTTLE_TTL_LONG", { infer: true });
+  }
+
+  get throttleLimitLong(): number {
+    return this.configService.get("THROTTLE_LIMIT_LONG", { infer: true });
+  }
+
+  // Security Configuration
+  get csrfEnabled(): boolean {
+    return this.configService.get("CSRF_ENABLED", { infer: true });
+  }
+
   // Utility methods
   get redisConfig() {
     return {

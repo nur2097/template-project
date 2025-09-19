@@ -17,6 +17,7 @@ jobs:
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       JWT_SECRET: "test-secret-key-minimum-32-chars-required-for-security"
+      JWT_REFRESH_SECRET: "test-refresh-secret-key-minimum-32-chars-required-for-security"
       JWT_EXPIRES_IN: "1h"
       JWT_REFRESH_EXPIRES_IN: "7d"
       JWT_ISSUER: "test-api"
@@ -91,7 +92,31 @@ jobs:
         
       - name: Setup test database
         run: |
-          echo "DATABASE_URL=${{ env.DATABASE_URL }}" > .env.test
+          echo "NODE_ENV=${{ env.NODE_ENV }}" > .env.test
+          echo "DATABASE_URL=${{ env.DATABASE_URL }}" >> .env.test
+          echo "MONGODB_URI=${{ env.MONGODB_URI }}" >> .env.test
+          echo "MONGODB_LOG_DB=${{ env.MONGODB_LOG_DB }}" >> .env.test
+          echo "REDIS_HOST=${{ env.REDIS_HOST }}" >> .env.test
+          echo "REDIS_PORT=${{ env.REDIS_PORT }}" >> .env.test
+          echo "JWT_SECRET=${{ env.JWT_SECRET }}" >> .env.test
+          echo "JWT_REFRESH_SECRET=${{ env.JWT_REFRESH_SECRET }}" >> .env.test
+          echo "JWT_EXPIRES_IN=${{ env.JWT_EXPIRES_IN }}" >> .env.test
+          echo "JWT_REFRESH_EXPIRES_IN=${{ env.JWT_REFRESH_EXPIRES_IN }}" >> .env.test
+          echo "JWT_ISSUER=${{ env.JWT_ISSUER }}" >> .env.test
+          echo "JWT_AUDIENCE=${{ env.JWT_AUDIENCE }}" >> .env.test
+          echo "PORT=${{ env.PORT }}" >> .env.test
+          echo "API_PREFIX=${{ env.API_PREFIX }}" >> .env.test
+          echo "CORS_ORIGIN=${{ env.CORS_ORIGIN }}" >> .env.test
+          echo "SWAGGER_ENABLED=${{ env.SWAGGER_ENABLED }}" >> .env.test
+          echo "LOG_LEVEL=${{ env.LOG_LEVEL }}" >> .env.test
+          echo "BCRYPT_ROUNDS=${{ env.BCRYPT_ROUNDS }}" >> .env.test
+          echo "THROTTLE_TTL=${{ env.THROTTLE_TTL }}" >> .env.test
+          echo "THROTTLE_LIMIT=${{ env.THROTTLE_LIMIT }}" >> .env.test
+          echo "MAX_FILE_SIZE=${{ env.MAX_FILE_SIZE }}" >> .env.test
+          echo "UPLOAD_DEST=${{ env.UPLOAD_DEST }}" >> .env.test
+          echo "CACHE_TTL=${{ env.CACHE_TTL }}" >> .env.test
+          echo "CACHE_MAX_ITEMS=${{ env.CACHE_MAX_ITEMS }}" >> .env.test
+          echo "TRACING_ENABLED=${{ env.TRACING_ENABLED }}" >> .env.test
           npx prisma migrate deploy
           
       - name: Build application

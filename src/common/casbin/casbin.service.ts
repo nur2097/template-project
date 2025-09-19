@@ -1,7 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
 import { newEnforcer, Enforcer } from "casbin";
 import { join } from "path";
-import { ConfigurationService } from "../../config/configuration.service";
 import { PrismaService } from "../../shared/database/prisma.service";
 
 @Injectable()
@@ -9,10 +8,7 @@ export class CasbinService implements OnModuleInit {
   private readonly logger = new Logger(CasbinService.name);
   private enforcer!: Enforcer;
 
-  constructor(
-    private readonly configService: ConfigurationService,
-    private readonly prisma: PrismaService
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
     await this.initializeEnforcer();

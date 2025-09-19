@@ -448,8 +448,7 @@ export class HealthService extends HealthIndicator {
   } {
     try {
       // Try to get actual filesystem stats
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const _stats = fs.statSync(process.cwd());
+      fs.statSync(process.cwd()); // Verify filesystem access
 
       // If we can't get real disk usage, throw to use environment variables
       throw new Error("Cannot determine real disk usage");

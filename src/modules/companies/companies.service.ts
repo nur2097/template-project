@@ -1,11 +1,21 @@
-import { Injectable, Logger } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
 import { PrismaService } from "../../shared/database/prisma.service";
 import { CacheService } from "../../shared/cache/cache.service";
+import { EmailService } from "../email/email.service";
+import { ConfigurationService } from "../../config/configuration.service";
 import { CreateCompanyDto } from "./dto/create-company.dto";
 import { RegisterCompanyDto } from "./dto/register-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyResponseDto } from "./dto/company-response.dto";
-import { SystemUserRole } from "@prisma/client";
+import { CreateInvitationDto } from "./dto/create-invitation.dto";
+import { InvitationResponseDto } from "./dto/invitation-response.dto";
+import { SystemUserRole, CompanyInvitationStatus } from "@prisma/client";
 import { ValidationUtil } from "../../common/utils";
 import { PasswordUtil } from "../../common/utils/password.util";
 import {
@@ -21,7 +31,9 @@ export class CompaniesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
+    private readonly emailService: EmailService,
+    private readonly configService: ConfigurationService
   ) {}
 
   async create(
@@ -513,6 +525,255 @@ export class CompaniesService {
     return {
       data: users,
       meta: { total, page, limit, totalPages },
+    };
+  }
+
+  // INVITATION MANAGEMENT METHODS
+
+  async createInvitation(
+    createInvitationDto: CreateInvitationDto,
+    inviterId: number,
+    companyId: number
+  ): Promise<InvitationResponseDto> {
+    this.logger.debug(
+      `Creating invitation for ${createInvitationDto.email} in company ${companyId}`
+    );
+
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: createInvitationDto.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException(
+        `User with email ${createInvitationDto.email} already exists`
+      );
+    }
+
+    // Check if pending invitation already exists
+    const existingInvitation = await this.prisma.companyInvitation.findFirst({
+      where: {
+        email: createInvitationDto.email,
+        companyId,
+        status: CompanyInvitationStatus.PENDING,
+      },
+    });
+
+    if (existingInvitation) {
+      throw new ConflictException(
+        `Pending invitation already exists for ${createInvitationDto.email}`
+      );
+    }
+
+    // Generate unique invitation code
+    const code = this.generateInvitationCode();
+
+    // Set expiration (7 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    try {
+      const invitation = await this.prisma.companyInvitation.create({
+        data: {
+          email: createInvitationDto.email,
+          code,
+          role: createInvitationDto.role || SystemUserRole.USER,
+          status: CompanyInvitationStatus.PENDING,
+          invitedBy: inviterId,
+          companyId,
+          expiresAt,
+        },
+        include: {
+          company: {
+            select: { id: true, name: true, slug: true },
+          },
+          inviter: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      // Send invitation email
+      await this.sendInvitationEmail(invitation);
+
+      // Clear invitations cache
+      await this.cacheService.invalidatePattern(
+        `company:${companyId}:invitations:*`
+      );
+
+      this.logger.log(
+        `Invitation created and sent to ${createInvitationDto.email}`
+      );
+
+      return this.transformToInvitationResponse(invitation);
+    } catch (error) {
+      this.logger.error(`Failed to create invitation: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getInvitations(
+    companyId: number,
+    page = 1,
+    limit = 10,
+    status?: string
+  ) {
+    const skip = (page - 1) * limit;
+    const where: any = { companyId };
+
+    if (status) {
+      where.status = status.toUpperCase();
+    }
+
+    const [invitations, total] = await Promise.all([
+      this.prisma.companyInvitation.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          inviter: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.companyInvitation.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: invitations.map((invitation) =>
+        this.transformToInvitationResponse(invitation)
+      ),
+      meta: { total, page, limit, totalPages },
+    };
+  }
+
+  async cancelInvitation(
+    invitationId: number,
+    companyId: number
+  ): Promise<void> {
+    const invitation = await this.prisma.companyInvitation.findFirst({
+      where: { id: invitationId, companyId },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException("Invitation not found");
+    }
+
+    if (invitation.status !== CompanyInvitationStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot cancel invitation with status: ${invitation.status}`
+      );
+    }
+
+    try {
+      await this.prisma.companyInvitation.update({
+        where: { id: invitationId },
+        data: {
+          status: CompanyInvitationStatus.REJECTED,
+          rejectedAt: new Date(),
+        },
+      });
+
+      // Clear invitations cache
+      await this.cacheService.invalidatePattern(
+        `company:${companyId}:invitations:*`
+      );
+
+      this.logger.log(`Invitation ${invitationId} cancelled`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to cancel invitation ${invitationId}: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  private async sendInvitationEmail(invitation: any): Promise<void> {
+    const invitationUrl = `${this.configService.frontendUrl}/register?companySlug=${invitation.company.slug}&invitationCode=${invitation.code}`;
+
+    const emailData = {
+      to: invitation.email,
+      subject: `Invitation to join ${invitation.company.name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #333;">You're invited to join ${invitation.company.name}</h1>
+          <p>Hi there!</p>
+          <p><strong>${invitation.inviter.firstName} ${invitation.inviter.lastName}</strong> has invited you to join <strong>${invitation.company.name}</strong>.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${invitationUrl}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+              Accept Invitation
+            </a>
+          </div>
+          <p>Or copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #666;">${invitationUrl}</p>
+          <p><strong>Your invitation code:</strong> ${invitation.code}</p>
+          <p>This invitation will expire on ${invitation.expiresAt.toLocaleDateString()}.</p>
+          <p>If you weren't expecting this invitation, you can safely ignore this email.</p>
+          <br>
+          <p>Best regards,<br>${invitation.company.name} Team</p>
+        </div>
+      `,
+      text: `
+        You're invited to join ${invitation.company.name}!
+
+        ${invitation.inviter.firstName} ${invitation.inviter.lastName} has invited you to join ${invitation.company.name}.
+
+        Accept your invitation by visiting: ${invitationUrl}
+
+        Your invitation code: ${invitation.code}
+
+        This invitation expires on ${invitation.expiresAt.toLocaleDateString()}.
+
+        If you weren't expecting this invitation, you can safely ignore this email.
+
+        Best regards,
+        ${invitation.company.name} Team
+      `,
+    };
+
+    const result = await this.emailService.sendEmail(emailData);
+
+    if (!result.success) {
+      this.logger.error(`Failed to send invitation email: ${result.error}`);
+      // Don't throw error here - invitation is created but email failed
+      // Could be handled by a background job retry mechanism
+    }
+  }
+
+  private generateInvitationCode(): string {
+    return `INV${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  }
+
+  private transformToInvitationResponse(
+    invitation: any
+  ): InvitationResponseDto {
+    return {
+      id: invitation.id,
+      email: invitation.email,
+      code: invitation.code,
+      role: invitation.role,
+      status: invitation.status,
+      invitedBy: invitation.invitedBy,
+      companyId: invitation.companyId,
+      expiresAt: invitation.expiresAt.toISOString(),
+      acceptedAt: invitation.acceptedAt?.toISOString(),
+      rejectedAt: invitation.rejectedAt?.toISOString(),
+      createdAt: invitation.createdAt.toISOString(),
+      updatedAt: invitation.updatedAt.toISOString(),
+      inviter: invitation.inviter,
     };
   }
 

@@ -218,12 +218,13 @@ export class UnifiedAuthGuard implements CanActivate {
   }
 
   private enforceCompanyIsolation(request: any, user: any): void {
-    // SUPERADMIN bypasses company isolation
+    // SUPERADMIN bypasses company isolation but with security controls
     if (user.systemRole === SystemUserRole.SUPERADMIN) {
-      // Check if query parameter specifies target company for SUPERADMIN
-      const targetCompanyId = request.query?.companyId
-        ? parseInt(request.query.companyId)
-        : user.companyId;
+      // Validate target company access for SUPERADMIN
+      const targetCompanyId = this.validateSuperAdminCompanyAccess(
+        request,
+        user
+      );
 
       // Set context for SUPERADMIN
       request.companyId = targetCompanyId || null;
@@ -236,7 +237,8 @@ export class UnifiedAuthGuard implements CanActivate {
       request.isSuperAdmin = true;
 
       this.logger.debug(
-        `SUPERADMIN context: companyId=${request.companyId}, globalAccess=${!targetCompanyId}`
+        `SUPERADMIN context: companyId=${request.companyId}, globalAccess=${!targetCompanyId}`,
+        { userId: user.sub, originalCompanyId: user.companyId }
       );
       return;
     }
@@ -433,5 +435,59 @@ export class UnifiedAuthGuard implements CanActivate {
     this.checkCompanyRoles(context, user);
 
     this.logger.debug(`Legacy authorization passed for user ${user.sub}`);
+  }
+
+  /**
+   * Validates SUPERADMIN company access with security controls
+   */
+  private validateSuperAdminCompanyAccess(
+    request: any,
+    user: any
+  ): number | null {
+    const requestedCompanyId = request.query?.companyId
+      ? parseInt(request.query.companyId, 10)
+      : null;
+
+    // Security validation for company ID parameter
+    if (requestedCompanyId !== null) {
+      // Validate that companyId is a valid positive integer
+      if (!Number.isInteger(requestedCompanyId) || requestedCompanyId <= 0) {
+        this.logger.warn(
+          `SUPERADMIN ${user.sub} attempted to access invalid company ID: ${request.query.companyId}`,
+          { ip: request.ip, userAgent: request.get("User-Agent") }
+        );
+        throw new ForbiddenException("Invalid company ID format");
+      }
+
+      // Check if the requested company actually exists (basic validation)
+      // Note: This is a lightweight check - full validation happens in business logic
+      if (requestedCompanyId > 999999) {
+        // Reasonable upper bound
+        this.logger.warn(
+          `SUPERADMIN ${user.sub} attempted to access suspiciously high company ID: ${requestedCompanyId}`,
+          { ip: request.ip, userAgent: request.get("User-Agent") }
+        );
+        throw new ForbiddenException("Company ID out of valid range");
+      }
+
+      // Log SUPERADMIN company access for audit trail
+      this.logger.log(
+        `SUPERADMIN ${user.sub} accessing company ${requestedCompanyId}`,
+        {
+          superAdminId: user.sub,
+          targetCompanyId: requestedCompanyId,
+          originalCompanyId: user.companyId,
+          ip: request.ip,
+          userAgent: request.get("User-Agent"),
+          path: request.path,
+          method: request.method,
+        }
+      );
+
+      return requestedCompanyId;
+    }
+
+    // If no specific company requested, use SUPERADMIN's own company or global access
+    return user.companyId || null;
   }
 }

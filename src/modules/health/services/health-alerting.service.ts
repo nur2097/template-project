@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ConfigurationService } from "../../../config";
 import { EmailService } from "../../email/email.service";
 
 export interface HealthAlert {
@@ -28,10 +27,7 @@ export class HealthAlertingService {
   private readonly alertHistory: HealthAlert[] = [];
   private readonly lastAlertTime = new Map<string, Date>();
 
-  constructor(
-    private readonly configService: ConfigurationService,
-    private readonly emailService?: EmailService
-  ) {}
+  constructor(private readonly emailService?: EmailService) {}
 
   private readonly defaultRules: AlertingRule[] = [
     {

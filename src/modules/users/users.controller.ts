@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   ParseIntPipe,
   DefaultValuePipe,
+  UseGuards,
 } from "@nestjs/common";
 import { CacheInterceptor } from "@nestjs/cache-manager";
 import {
@@ -28,6 +29,8 @@ import {
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CacheKey, CacheTTL } from "../../common/decorators/cache.decorator";
 import { ResponseUtil } from "../../common/utils/response.util";
+import { ThrottlerGuard } from "@nestjs/throttler";
+import { Throttle } from "@nestjs/throttler";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserResponseDto } from "./dto/user-response.dto";
@@ -41,6 +44,8 @@ export class UsersController {
 
   @Get()
   @CanReadUsers()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   @ApiOperation({ summary: "Get all users with pagination" })
   @ApiResponse({
     status: 200,

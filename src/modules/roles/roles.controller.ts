@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   ParseBoolPipe,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -22,6 +23,8 @@ import { RequireAuth } from "../../common/decorators/require-auth.decorator";
 import { Permissions } from "../../common/decorators/permissions.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ResponseUtil } from "../../common/utils/response.util";
+import { ThrottlerGuard } from "@nestjs/throttler";
+import { Throttle } from "@nestjs/throttler";
 import { RolesService } from "./roles.service";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
@@ -39,6 +42,8 @@ export class RolesController {
 
   @Get()
   @Permissions("roles.read")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @ApiOperation({ summary: "Get all roles with pagination" })
   @ApiResponse({
     status: 200,
@@ -172,10 +177,14 @@ export class RolesController {
   @RequireAuth("ADMIN")
   @ApiOperation({ summary: "Remove role from user" })
   @ApiResponse({ status: 200, description: "Role removed successfully" })
-  async removeRole(@Body() assignRoleDto: AssignRoleDto) {
+  async removeRole(
+    @Body() assignRoleDto: AssignRoleDto,
+    @CurrentUser("companyId") companyId: number
+  ) {
     await this.rolesService.removeRoleFromUser(
       assignRoleDto.userId,
-      assignRoleDto.roleId
+      assignRoleDto.roleId,
+      companyId
     );
     return ResponseUtil.success(null, "Role removed successfully");
   }

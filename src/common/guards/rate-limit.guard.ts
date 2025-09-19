@@ -144,7 +144,6 @@ export class EnhancedRateLimitGuard implements CanActivate {
 
 // Keep the existing ThrottlerGuard for backward compatibility
 import { ThrottlerGuard, ThrottlerModuleOptions } from "@nestjs/throttler";
-import { ConfigService } from "@nestjs/config";
 import { ThrottlerStorage } from "@nestjs/throttler/dist/throttler-storage.interface";
 
 @Injectable()
@@ -152,8 +151,7 @@ export class RateLimitGuard extends ThrottlerGuard {
   constructor(
     options: ThrottlerModuleOptions,
     storageService: ThrottlerStorage,
-    reflector: Reflector,
-    private readonly configService: ConfigService
+    reflector: Reflector
   ) {
     super(options, storageService, reflector);
   }

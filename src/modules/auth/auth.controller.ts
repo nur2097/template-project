@@ -51,6 +51,7 @@ import {
   RegisterRateLimit,
   PasswordResetRateLimit,
   EmailVerificationRateLimit,
+  InvitationValidationRateLimit,
 } from "../../common/decorators/rate-limit.decorator";
 
 @ApiTags("Authentication")
@@ -72,6 +73,7 @@ export class AuthController {
   @Post("register")
   @UseGuards(EnhancedRateLimitGuard)
   @RegisterRateLimit()
+  @InvitationValidationRateLimit()
   @ApiOperation({ summary: "Register new user" })
   @ApiResponse({
     status: 201,

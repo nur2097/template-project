@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { SystemUserRole } from "@prisma/client";
 
 export interface PermissionTemplate {
@@ -25,8 +25,6 @@ export interface RoleTemplate {
 
 @Injectable()
 export class RoleTemplatesService {
-  private readonly logger = new Logger(RoleTemplatesService.name);
-
   /**
    * Get all available role templates
    */

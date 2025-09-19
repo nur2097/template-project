@@ -27,6 +27,8 @@ import { CreateCompanyDto } from "./dto/create-company.dto";
 import { RegisterCompanyDto } from "./dto/register-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyResponseDto } from "./dto/company-response.dto";
+import { CreateInvitationDto } from "./dto/create-invitation.dto";
+import { InvitationResponseDto } from "./dto/invitation-response.dto";
 import { RequireAuth } from "../../common/decorators/require-auth.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ResponseUtil } from "../../common/utils/response.util";
@@ -298,5 +300,92 @@ export class CompaniesController {
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number
   ) {
     return this.companiesService.getCompanyUsers(companyId, page, limit);
+  }
+
+  // INVITATION MANAGEMENT ENDPOINTS
+
+  @Post("my-company/invitations")
+  @RequireAuth("users.invite")
+  @UseGuards(EnhancedRateLimitGuard)
+  @CompanyRegistrationRateLimit()
+  @ApiOperation({ summary: "Send invitation to join company" })
+  @ApiResponse({
+    status: 201,
+    description: "Invitation sent successfully",
+    type: InvitationResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid input or user already exists",
+  })
+  @ApiResponse({ status: 409, description: "Invitation already exists" })
+  async createInvitation(
+    @Body() createInvitationDto: CreateInvitationDto,
+    @CurrentUser("id") userId: number,
+    @CurrentUser("companyId") companyId: number
+  ): Promise<InvitationResponseDto> {
+    return this.companiesService.createInvitation(
+      createInvitationDto,
+      userId,
+      companyId
+    );
+  }
+
+  @Get("my-company/invitations")
+  @RequireAuth("users.read")
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey("company:{companyId}:invitations:page:{query.page}")
+  @CacheTTL(300) // 5 minutes
+  @ApiOperation({ summary: "Get company invitations" })
+  @ApiResponse({
+    status: 200,
+    description: "Invitations retrieved successfully",
+    type: [InvitationResponseDto],
+  })
+  @ApiQuery({
+    name: "page",
+    required: false,
+    type: Number,
+    description: "Page number",
+  })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    type: Number,
+    description: "Items per page",
+  })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    type: String,
+    description: "Filter by status",
+  })
+  async getInvitations(
+    @CurrentUser("companyId") companyId: number,
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("status") status?: string
+  ) {
+    return this.companiesService.getInvitations(companyId, page, limit, status);
+  }
+
+  @Delete("my-company/invitations/:id")
+  @RequireAuth("users.invite")
+  @ApiOperation({ summary: "Cancel pending invitation" })
+  @ApiResponse({
+    status: 200,
+    description: "Invitation cancelled successfully",
+  })
+  @ApiResponse({ status: 404, description: "Invitation not found" })
+  @ApiResponse({
+    status: 400,
+    description: "Cannot cancel non-pending invitation",
+  })
+  async cancelInvitation(
+    @Param("id", ParseIntPipe) invitationId: number,
+    @CurrentUser("companyId") companyId: number
+  ) {
+    await this.companiesService.cancelInvitation(invitationId, companyId);
+    return ResponseUtil.success(null, "Invitation cancelled successfully");
   }
 }

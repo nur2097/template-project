@@ -138,6 +138,9 @@ model Device {
   refreshTokens RefreshToken[]
 
   @@unique([deviceId, userId])
+  @@index([userId])
+  @@index([companyId])
+  @@index([isActive])
   @@map("devices")
 }
 
@@ -187,6 +190,10 @@ model User {
   passwordResets PasswordReset[]     @relation("UserPasswordResets")
   createdInvitations CompanyInvitation[] @relation("InvitationCreatedBy")
 
+  @@index([companyId])
+  @@index([status])
+  @@index([lastLoginAt])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -239,6 +246,9 @@ model CompanyInvitation {
   inviter    User    @relation("InvitationCreatedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
 
   @@unique([email, companyId])
+  @@index([companyId])
+  @@index([status])
+  @@index([expiresAt])
   @@map("company_invitations")
 }
 

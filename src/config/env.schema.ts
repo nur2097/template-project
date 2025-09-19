@@ -181,6 +181,60 @@ export const envSchema = z.object({
     .default("100")
     .describe("Rate limiting request limit per window"),
 
+  THROTTLE_TTL_SHORT: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, {
+      message: "THROTTLE_TTL_SHORT must be a positive number",
+    })
+    .default("60000")
+    .describe("Short rate limiting time window in milliseconds"),
+
+  THROTTLE_LIMIT_SHORT: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, {
+      message: "THROTTLE_LIMIT_SHORT must be a positive number",
+    })
+    .default("20")
+    .describe("Short rate limiting request limit per window"),
+
+  THROTTLE_TTL_MEDIUM: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, {
+      message: "THROTTLE_TTL_MEDIUM must be a positive number",
+    })
+    .default("300000")
+    .describe("Medium rate limiting time window in milliseconds"),
+
+  THROTTLE_LIMIT_MEDIUM: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, {
+      message: "THROTTLE_LIMIT_MEDIUM must be a positive number",
+    })
+    .default("100")
+    .describe("Medium rate limiting request limit per window"),
+
+  THROTTLE_TTL_LONG: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, {
+      message: "THROTTLE_TTL_LONG must be a positive number",
+    })
+    .default("3600000")
+    .describe("Long rate limiting time window in milliseconds"),
+
+  THROTTLE_LIMIT_LONG: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => val > 0, {
+      message: "THROTTLE_LIMIT_LONG must be a positive number",
+    })
+    .default("500")
+    .describe("Long rate limiting request limit per window"),
+
   // Security
   BCRYPT_ROUNDS: z
     .string()
@@ -252,6 +306,17 @@ export const envSchema = z.object({
     })
     .default("100")
     .describe("Maximum number of cached items"),
+
+  // CSRF Protection
+  CSRF_ENABLED: z
+    .string()
+    .transform((val) => val.toLowerCase())
+    .refine((val) => ["true", "false"].includes(val), {
+      message: "CSRF_ENABLED must be 'true' or 'false'",
+    })
+    .transform((val) => val === "true")
+    .default("true")
+    .describe("Enable CSRF protection"),
 
   // JWT Configuration (more secure than using FROM_NAME)
   JWT_ISSUER: z

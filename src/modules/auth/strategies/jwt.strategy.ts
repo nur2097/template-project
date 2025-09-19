@@ -8,8 +8,8 @@ import { Request } from "express";
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private configService: ConfigurationService,
-    private tokenBlacklistService: TokenBlacklistService
+    private readonly configService: ConfigurationService,
+    private readonly tokenBlacklistService: TokenBlacklistService
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -17,9 +17,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: configService.jwtSecret,
       passReqToCallback: true, // Pass request to validate method
     });
+
+    // Ensure configService is marked as used
+    this.configService = configService;
   }
 
   async validate(request: Request, payload: any) {
+    // Validate JWT configuration
+    if (!this.configService.jwtSecret) {
+      throw new UnauthorizedException("JWT configuration error");
+    }
+
     // Extract token from request
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(request);
 

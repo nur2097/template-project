@@ -56,7 +56,7 @@ export class PasswordPolicyUtil {
     /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
 
   static readonly DEFAULT_POLICY: PasswordPolicyOptions = {
-    minLength: 8,
+    minLength: 12,
     maxLength: 128,
     requireUppercase: true,
     requireLowercase: true,

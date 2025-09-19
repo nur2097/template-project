@@ -4,16 +4,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "@shared/database/prisma.service";
-import { ConfigService } from "@nestjs/config";
 import { CryptoUtil } from "../../../common/utils/crypto.util";
 import { PasswordUtil } from "../../../common/utils/password.util";
 
 @Injectable()
 export class PasswordResetService {
-  constructor(
-    private readonly prismaService: PrismaService,
-    private readonly configService: ConfigService
-  ) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   async generateResetToken(email: string): Promise<string> {
     const user = await this.prismaService.user.findUnique({

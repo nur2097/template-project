@@ -3,7 +3,6 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
-  Logger,
 } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
@@ -12,8 +11,6 @@ import { StandardResponse } from "../utils/response.util";
 
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
-  private readonly logger = new Logger(ResponseInterceptor.name);
-
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse();

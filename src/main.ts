@@ -7,11 +7,55 @@ import helmet from "helmet";
 import { NestLoggerWrapper } from "./common/logger/nest-logger-wrapper";
 import { ConfigurationService } from "./config";
 
+/**
+ * Validates critical production secrets to prevent security issues
+ */
+function validateProductionSecrets(configService: ConfigurationService) {
+  const logger = new Logger("ProductionValidation");
+
+  // Check JWT secrets
+  const jwtSecret = configService.jwtSecret;
+  const refreshSecret = configService.jwtRefreshSecret;
+
+  if (jwtSecret.includes("DEVELOPMENT") || jwtSecret.length < 32) {
+    logger.error(
+      "❌ CRITICAL: Production JWT secret is weak or uses development value!"
+    );
+    process.exit(1);
+  }
+
+  if (refreshSecret.includes("DEVELOPMENT") || refreshSecret.length < 32) {
+    logger.error(
+      "❌ CRITICAL: Production JWT refresh secret is weak or uses development value!"
+    );
+    process.exit(1);
+  }
+
+  // Check database URL
+  const dbUrl = configService.databaseUrl;
+  if (dbUrl.includes("localhost") || dbUrl.includes("127.0.0.1")) {
+    logger.warn("⚠️  WARNING: Database URL points to localhost in production");
+  }
+
+  // Check frontend URL
+  const frontendUrl = configService.frontendUrl;
+  if (frontendUrl.includes("localhost") || frontendUrl.includes("127.0.0.1")) {
+    logger.warn("⚠️  WARNING: Frontend URL points to localhost in production");
+  }
+
+  logger.log("✅ Production secrets validation passed");
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Get type-safe configuration service
   const configService = app.get(ConfigurationService);
+
+  // Production security validation
+  if (configService.isProduction) {
+    validateProductionSecrets(configService);
+  }
 
   // Custom logger for enterprise logging
   const customLogger = app.get(NestLoggerWrapper);

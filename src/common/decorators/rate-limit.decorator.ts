@@ -138,6 +138,20 @@ export class RateLimitPresets {
       return userId ? `upload:user:${userId}` : `upload:ip:${ip}`;
     },
   };
+
+  /**
+   * Strict rate limiting for invitation code validation
+   * 10 attempts per hour per IP to prevent brute force
+   */
+  static readonly INVITATION_VALIDATION = {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10,
+    message: "Too many invitation validation attempts, please try again later",
+    keyGenerator: (req: Request) => {
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      return `invitation_validation:${ip}`;
+    },
+  };
 }
 
 /**
@@ -153,3 +167,5 @@ export const CompanyRegistrationRateLimit = () =>
   RateLimit(RateLimitPresets.COMPANY_REGISTRATION);
 export const FileUploadRateLimit = () =>
   RateLimit(RateLimitPresets.FILE_UPLOAD);
+export const InvitationValidationRateLimit = () =>
+  RateLimit(RateLimitPresets.INVITATION_VALIDATION);

@@ -36,8 +36,8 @@ export class ZodValidationPipe implements PipeTransform {
 // Decorator for easier usage
 export const UsePipes = (schema: ZodSchema) => {
   return (
-    target: any,
-    propertyName: string,
+    _target: any,
+    _propertyName: string,
     descriptor: PropertyDescriptor
   ) => {
     Reflect.defineMetadata(
