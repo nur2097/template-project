@@ -29,7 +29,7 @@ import {
 
 @ApiTags("Upload")
 @Controller("upload")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
@@ -48,7 +48,7 @@ export class UploadController {
     const uploadedFile: CustomUploadedFile = {
       fieldname: file.fieldname,
       originalname: file.originalname,
-      encoding: file.encoding,
+      encoding: file.encoding || "binary",
       mimetype: file.mimetype,
       buffer: file.buffer,
       size: file.size,
@@ -78,7 +78,7 @@ export class UploadController {
     const uploadedFiles: CustomUploadedFile[] = files.map((file) => ({
       fieldname: file.fieldname,
       originalname: file.originalname,
-      encoding: file.encoding,
+      encoding: file.encoding || "binary",
       mimetype: file.mimetype,
       buffer: file.buffer,
       size: file.size,
@@ -117,7 +117,7 @@ export class UploadController {
     const uploadedFile: CustomUploadedFile = {
       fieldname: file.fieldname,
       originalname: file.originalname,
-      encoding: file.encoding,
+      encoding: file.encoding || "binary",
       mimetype: file.mimetype,
       buffer: file.buffer,
       size: file.size,

@@ -50,7 +50,7 @@ export class EnhancedHealthController {
   }
 
   @Get("comprehensive")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @CanReadHealth()
   @ApiOperation({ summary: "Comprehensive health report with all systems" })
@@ -94,7 +94,7 @@ export class EnhancedHealthController {
   }
 
   @Get("external-apis")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Check external API health" })
   @ApiResponse({
@@ -118,7 +118,7 @@ export class EnhancedHealthController {
   }
 
   @Get("external-apis/:apiName")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Check specific external API health" })
   @ApiParam({
@@ -168,7 +168,7 @@ export class EnhancedHealthController {
   }
 
   @Get("connection-pools")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Check database connection pool health" })
   @ApiResponse({
@@ -192,7 +192,7 @@ export class EnhancedHealthController {
   }
 
   @Get("connection-pools/metrics")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Get detailed connection pool metrics" })
   @ApiResponse({ status: 200, description: "Connection pool metrics" })
@@ -202,7 +202,7 @@ export class EnhancedHealthController {
   }
 
   @Get("alerts")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Get active health alerts" })
   @ApiResponse({ status: 200, description: "Active health alerts" })
@@ -218,7 +218,7 @@ export class EnhancedHealthController {
   }
 
   @Get("alerts/history")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Get health alerts history" })
   @ApiQuery({
@@ -239,7 +239,7 @@ export class EnhancedHealthController {
   }
 
   @Get("alerts/stats")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Get health alerting statistics" })
   @ApiResponse({ status: 200, description: "Health alerting statistics" })
@@ -251,7 +251,7 @@ export class EnhancedHealthController {
   }
 
   @Post("alerts/clear-resolved")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Clear resolved alerts from active alerts list" })
   @ApiResponse({ status: 200, description: "Resolved alerts cleared" })
@@ -266,7 +266,7 @@ export class EnhancedHealthController {
   }
 
   @Get("dashboard")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @SuperAdminOnly()
   @ApiOperation({ summary: "Get health dashboard data" })
   @ApiResponse({ status: 200, description: "Health dashboard data" })

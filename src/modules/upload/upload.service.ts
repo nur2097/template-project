@@ -304,7 +304,7 @@ export class UploadService {
       return { valid: true };
     }
 
-    const fileHeader = Array.from(file.buffer.slice(0, 16));
+    const fileHeader = Array.from(file.buffer.subarray(0, 16));
 
     for (const signature of signatures) {
       let matches = true;

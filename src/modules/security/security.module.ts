@@ -8,6 +8,8 @@ import { RateLimitingModule } from "../../common/rate-limiting/rate-limiting.mod
 })
 export class SecurityModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // CSRF middleware re-enabled with correct path configuration
     consumer.apply(CsrfMiddleware).forRoutes("*");
+    console.log("SecurityModule configure called - CSRF middleware enabled");
   }
 }

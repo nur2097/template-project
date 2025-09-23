@@ -7,6 +7,19 @@ import helmet from "helmet";
 import { NestLoggerWrapper } from "./common/logger/nest-logger-wrapper";
 import { ConfigurationService } from "./config";
 
+// Global error handlers to prevent server crashes
+process.on("unhandledRejection", (reason) => {
+  const logger = new Logger("UnhandledRejection");
+  logger.error("Unhandled Promise Rejection:", reason);
+  // Don't exit the process, just log the error
+});
+
+process.on("uncaughtException", (error) => {
+  const logger = new Logger("UncaughtException");
+  logger.error("Uncaught Exception:", error);
+  // Don't exit the process, just log the error
+});
+
 /**
  * Validates critical production secrets to prevent security issues
  */
@@ -61,12 +74,65 @@ async function bootstrap() {
   const customLogger = app.get(NestLoggerWrapper);
   app.useLogger(customLogger);
 
-  // Security middleware
-  app.use(helmet());
+  // Security middleware optimized for Swagger - COMPLETELY DISABLE CSP FOR DEBUGGING
+  if (configService.nodeEnv === "production") {
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+            imgSrc: ["'self'", "data:", "https:"],
+            fontSrc: ["'self'", "https:"],
+            connectSrc: [
+              "'self'",
+              "http://localhost:3000",
+              "https://localhost:3000",
+            ],
+          },
+        },
+        crossOriginResourcePolicy: false,
+        crossOriginOpenerPolicy: false,
+        originAgentCluster: false,
+      })
+    );
+  } else {
+    // DEVELOPMENT: Disable CSP completely to test if it's blocking Swagger
+    app.use(
+      helmet({
+        contentSecurityPolicy: false, // COMPLETELY DISABLE CSP
+        crossOriginResourcePolicy: false,
+        crossOriginOpenerPolicy: false,
+        originAgentCluster: false,
+      })
+    );
+    console.log(
+      "🔧 DEBUG: CSP completely disabled in development for Swagger debugging"
+    );
+  }
   app.use(compression());
 
+  // Serve static files for debugging (development only)
+  if (configService.nodeEnv !== "production") {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require("path");
+    app.use("/test", (req: any, res: any, next: any) => {
+      if (req.path === "/swagger-debug-test.html") {
+        res.sendFile(path.join(process.cwd(), "swagger-debug-test.html"));
+      } else if (req.path === "/swagger-test-simple.html") {
+        res.sendFile(path.join(process.cwd(), "swagger-test-simple.html"));
+      } else {
+        next();
+      }
+    });
+    console.log("🔧 DEBUG: Static test files enabled at /test/");
+  }
+
+  console.log("🔧 DEBUG: Security middleware enabled with safe configuration");
+
   // Global prefix
-  app.setGlobalPrefix(configService.apiPrefix);
+  app.setGlobalPrefix(`/${configService.apiPrefix}`);
 
   // API Versioning
   app.enableVersioning({
@@ -148,7 +214,7 @@ async function bootstrap() {
           description: "Enter JWT token",
           in: "header",
         },
-        "JWT"
+        "JWT-Auth"
       )
       .addTag("Authentication", "User authentication and authorization")
       .addTag("Users", "User management operations")
@@ -164,7 +230,16 @@ async function bootstrap() {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup(`${configService.apiPrefix}/docs`, app, document, {
+
+    // Add server information to help Swagger UI make requests to the correct URL
+    document.servers = [
+      {
+        url: `http://localhost:${configService.port}`,
+        description: "Development server",
+      },
+    ];
+
+    SwaggerModule.setup(`/${configService.apiPrefix}/docs`, app, document, {
       swaggerOptions: {
         persistAuthorization: true,
         tagsSorter: "alpha",
@@ -173,7 +248,92 @@ async function bootstrap() {
         filter: true,
         showRequestHeaders: true,
         showCommonExtensions: true,
+        tryItOutEnabled: true,
+        requestInterceptor: (req: any) => {
+          try {
+            // Debug logging for Swagger UI requests
+            console.log("🚀 Swagger Request Interceptor:", {
+              url: req.url,
+              method: req.method,
+              credentials: req.credentials,
+              headers: req.headers,
+            });
+
+            // Fix common Swagger UI issues
+            req.credentials = "same-origin";
+            req.timeout = 8000; // 8 second timeout
+
+            // Ensure proper headers exist
+            if (!req.headers) {
+              req.headers = {};
+            }
+
+            // Set proper content type for data requests
+            if (
+              req.method === "POST" ||
+              req.method === "PUT" ||
+              req.method === "PATCH"
+            ) {
+              if (
+                !req.headers["Content-Type"] &&
+                !req.headers["content-type"]
+              ) {
+                req.headers["Content-Type"] = "application/json";
+              }
+            }
+
+            // Add CORS bypass headers
+            req.headers["Accept"] = "application/json, text/plain, */*";
+
+            console.log("✅ Request processed successfully");
+            return req;
+          } catch (error) {
+            console.error("❌ Request Interceptor Error:", error);
+            // Return request anyway to prevent blocking
+            return req;
+          }
+        },
+        responseInterceptor: (response: any) => {
+          try {
+            // Debug logging for Swagger UI responses
+            console.log("📥 Swagger Response Interceptor:", {
+              status: response.status,
+              statusText: response.statusText,
+              url: response.url,
+              type: response.type,
+              ok: response.ok,
+            });
+
+            // Detailed error analysis
+            if (!response.status || response.status === 0) {
+              console.error("❌ SWAGGER NETWORK ERROR:", {
+                url: response.url,
+                type: response.type,
+                message:
+                  "This usually indicates CORS or CSP blocking the request",
+              });
+            } else if (response.status >= 400) {
+              console.warn("⚠️ SWAGGER HTTP ERROR:", {
+                status: response.status,
+                statusText: response.statusText,
+                url: response.url,
+              });
+            } else if (response.status >= 200 && response.status < 300) {
+              console.log("✅ SWAGGER SUCCESS:", {
+                status: response.status,
+                url: response.url,
+              });
+            }
+
+            return response;
+          } catch (error) {
+            console.error("❌ Response Interceptor Error:", error);
+            return response;
+          }
+        },
       },
+      customfavIcon: "/favicon.ico",
+      customSiteTitle: "NestJS Enterprise API Documentation",
       customCss: `
         .swagger-ui .topbar { display: none; }
         .swagger-ui .info { margin-bottom: 30px; }
@@ -186,12 +346,11 @@ async function bootstrap() {
         .swagger-ui .info .description pre { background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2980b9; }
         .swagger-ui .scheme-container { background: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
       `,
-      customSiteTitle: "Enterprise NestJS API Documentation",
     });
   }
 
   const port = configService.port;
-  await app.listen(port);
+  await app.listen(port, "0.0.0.0");
 
   // Use proper logger for startup messages
   const logger = new Logger("Bootstrap");
@@ -209,5 +368,13 @@ bootstrap().catch((err) => {
   // Create a basic logger for bootstrap errors since app might not be initialized
   const logger = new Logger("Bootstrap");
   logger.error("❌ Error starting server:", err);
-  process.exit(1);
+
+  // In development, don't exit to allow hot reload
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  } else {
+    logger.warn(
+      "⚠️ Bootstrap failed, but continuing in development mode for hot reload"
+    );
+  }
 });

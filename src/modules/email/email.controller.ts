@@ -11,7 +11,7 @@ import { EmailService, SendEmailDto } from "./email.service";
 
 @ApiTags("Email")
 @Controller("email")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
 

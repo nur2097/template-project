@@ -15,11 +15,19 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   use(req: Request, res: Response, next: NextFunction) {
+    // Debug logging for path resolution
+    this.logger.debug(`CSRF Middleware: ${req.method} ${req.path}`, {
+      originalUrl: req.originalUrl,
+      baseUrl: req.baseUrl,
+      url: req.url,
+    });
+
     // Only enable CSRF in production or when explicitly enabled
     const isEnabled =
       this.configService.csrfEnabled || this.configService.isProduction;
 
     if (!isEnabled) {
+      this.logger.debug(`CSRF disabled, passing through: ${req.path}`);
       return next();
     }
 
@@ -29,19 +37,30 @@ export class CsrfMiddleware implements NestMiddleware {
       return next();
     }
 
-    // Skip for specific paths
+    // Skip for specific paths - Updated for /api/v1 versioning
     const skipPaths = [
-      "/api/auth/login",
-      "/api/auth/register",
-      "/api/auth/refresh",
-      "/api/health",
-      "/api/docs",
-      "/api/metrics",
+      "/api/v1/auth/login",
+      "/api/v1/auth/register",
+      "/api/v1/auth/refresh",
+      "/api/v1/health",
+      "/api/v1", // Allow root API endpoint
+      "/api/v1/status",
+      "/api/v1/test", // Allow test endpoint
+      "/api/docs", // Swagger docs (no version)
+      "/metrics", // Metrics (no version)
     ];
 
-    if (skipPaths.some((path) => req.path.startsWith(path))) {
+    // Check both req.path and req.originalUrl for proper path matching
+    const requestPath = req.originalUrl || req.path;
+
+    if (skipPaths.some((path) => requestPath.startsWith(path))) {
+      this.logger.debug(`CSRF: Skipping path ${requestPath}`);
       return next();
     }
+
+    this.logger.error(
+      `CSRF: NOT skipping path' ${req.path}', skipPaths: '${JSON.stringify(skipPaths)}`
+    );
 
     // Skip for safe methods
     if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {

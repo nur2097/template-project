@@ -25,6 +25,7 @@ import { PerformanceInterceptor } from "./common/interceptors/performance.interc
 import { TracingInterceptor } from "./common/interceptors/tracing.interceptor";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
+import { AppController } from "./app.controller";
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { UnifiedAuthGuard } from "./common/guards/unified-auth.guard";
     }),
     QueueModule,
   ],
+  controllers: [AppController],
   providers: [
     // Global exception handling
     {

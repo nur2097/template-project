@@ -154,134 +154,144 @@ export class CompaniesService {
 
     // Use transaction to ensure data consistency
     try {
-      const result = await this.prisma.$transaction(async (prisma) => {
-        // Create company
-        const company = await prisma.company.create({
-          data: {
-            name: registerCompanyDto.name,
-            slug: registerCompanyDto.slug,
-            domain: registerCompanyDto.domain,
-            settings: registerCompanyDto.settings || {},
-            status: "ACTIVE",
-          },
-          include: {
-            _count: {
-              select: { users: true },
+      const result = await this.prisma.$transaction(
+        async (prisma) => {
+          // Create company
+          const company = await prisma.company.create({
+            data: {
+              name: registerCompanyDto.name,
+              slug: registerCompanyDto.slug,
+              domain: registerCompanyDto.domain,
+              settings: registerCompanyDto.settings || {},
+              status: "ACTIVE",
             },
-          },
-        });
-
-        // Hash admin password using PasswordUtil
-        const hashedPassword = await PasswordUtil.hash(
-          registerCompanyDto.adminPassword
-        );
-
-        // Create admin user
-        const adminUser = await prisma.user.create({
-          data: {
-            email: registerCompanyDto.adminEmail,
-            firstName: registerCompanyDto.adminFirstName,
-            lastName: registerCompanyDto.adminLastName,
-            password: hashedPassword,
-            phoneNumber: registerCompanyDto.adminPhoneNumber,
-            systemRole: SystemUserRole.ADMIN,
-            companyId: company.id,
-            status: "ACTIVE",
-            emailVerified: false,
-          },
-        });
-
-        // Create default permissions for the company
-        const defaultPermissions = [
-          {
-            name: "users.read",
-            resource: "users",
-            action: "read",
-            description: "View users",
-          },
-          {
-            name: "users.write",
-            resource: "users",
-            action: "write",
-            description: "Create and update users",
-          },
-          {
-            name: "users.delete",
-            resource: "users",
-            action: "delete",
-            description: "Delete users",
-          },
-          {
-            name: "roles.read",
-            resource: "roles",
-            action: "read",
-            description: "View roles and permissions",
-          },
-          {
-            name: "roles.write",
-            resource: "roles",
-            action: "write",
-            description: "Manage roles and permissions",
-          },
-          {
-            name: "company.read",
-            resource: "company",
-            action: "read",
-            description: "View company details",
-          },
-          {
-            name: "company.write",
-            resource: "company",
-            action: "write",
-            description: "Update company settings",
-          },
-        ];
-
-        const createdPermissions = await Promise.all(
-          defaultPermissions.map(async (perm) =>
-            prisma.permission.create({
-              data: {
-                name: perm.name,
-                description: perm.description,
-                resource: perm.resource,
-                action: perm.action,
-                companyId: company.id,
+            include: {
+              _count: {
+                select: { users: true },
               },
-            })
-          )
-        );
+            },
+          });
 
-        // Create default admin role
-        const adminRole = await prisma.role.create({
-          data: {
-            name: "Company Admin",
-            description: "Full administrative access to company resources",
+          // Hash admin password using PasswordUtil
+          const hashedPassword = await PasswordUtil.hash(
+            registerCompanyDto.adminPassword
+          );
+
+          // Create admin user
+          const adminUser = await prisma.user.create({
+            data: {
+              email: registerCompanyDto.adminEmail,
+              firstName: registerCompanyDto.adminFirstName,
+              lastName: registerCompanyDto.adminLastName,
+              password: hashedPassword,
+              phoneNumber: registerCompanyDto.adminPhoneNumber,
+              systemRole: SystemUserRole.ADMIN,
+              companyId: company.id,
+              status: "ACTIVE",
+              emailVerified: false,
+            },
+          });
+
+          // Create default permissions for the company
+          const defaultPermissions = [
+            {
+              name: "users.read",
+              resource: "users",
+              action: "read",
+              description: "View users",
+            },
+            {
+              name: "users.write",
+              resource: "users",
+              action: "write",
+              description: "Create and update users",
+            },
+            {
+              name: "users.delete",
+              resource: "users",
+              action: "delete",
+              description: "Delete users",
+            },
+            {
+              name: "roles.read",
+              resource: "roles",
+              action: "read",
+              description: "View roles and permissions",
+            },
+            {
+              name: "roles.write",
+              resource: "roles",
+              action: "write",
+              description: "Manage roles and permissions",
+            },
+            {
+              name: "company.read",
+              resource: "company",
+              action: "read",
+              description: "View company details",
+            },
+            {
+              name: "company.write",
+              resource: "company",
+              action: "write",
+              description: "Update company settings",
+            },
+          ];
+
+          // Create permissions in bulk for better performance
+          const permissionCreateData = defaultPermissions.map((perm) => ({
+            name: perm.name,
+            description: perm.description,
+            resource: perm.resource,
+            action: perm.action,
             companyId: company.id,
-          },
-        });
+          }));
 
-        // Assign all permissions to admin role
-        await Promise.all(
-          createdPermissions.map(async (permission) =>
-            prisma.rolePermission.create({
-              data: {
-                roleId: adminRole.id,
-                permissionId: permission.id,
-              },
-            })
-          )
-        );
+          await prisma.permission.createMany({
+            data: permissionCreateData,
+          });
 
-        // Assign admin role to admin user
-        await prisma.userRole.create({
-          data: {
-            userId: adminUser.id,
-            roleId: adminRole.id,
-          },
-        });
+          // Fetch created permissions to get their IDs
+          const createdPermissions = await prisma.permission.findMany({
+            where: {
+              companyId: company.id,
+              name: { in: defaultPermissions.map((p) => p.name) },
+            },
+            select: { id: true },
+          });
 
-        return { company, adminUser };
-      });
+          // Create default admin role
+          const adminRole = await prisma.role.create({
+            data: {
+              name: "Company Admin",
+              description: "Full administrative access to company resources",
+              companyId: company.id,
+            },
+          });
+
+          // Assign all permissions to admin role in bulk
+          await prisma.rolePermission.createMany({
+            data: createdPermissions.map((permission) => ({
+              roleId: adminRole.id,
+              permissionId: permission.id,
+            })),
+          });
+
+          // Assign admin role to admin user
+          await prisma.userRole.create({
+            data: {
+              userId: adminUser.id,
+              roleId: adminRole.id,
+            },
+          });
+
+          return { company, adminUser };
+        },
+        {
+          timeout: 60000, // 60 seconds for complex operations
+          maxWait: 10000, // 10 seconds max wait
+        }
+      );
 
       // Transform response
       const companyResponse = this.transformToCompanyResponse(result.company);

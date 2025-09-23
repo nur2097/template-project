@@ -30,6 +30,7 @@ import { CompanyResponseDto } from "./dto/company-response.dto";
 import { CreateInvitationDto } from "./dto/create-invitation.dto";
 import { InvitationResponseDto } from "./dto/invitation-response.dto";
 import { RequireAuth } from "../../common/decorators/require-auth.decorator";
+import { Permissions } from "../../common/decorators/permissions.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ResponseUtil } from "../../common/utils/response.util";
 import { CacheKey, CacheTTL } from "../../common/decorators/cache.decorator";
@@ -37,7 +38,7 @@ import { Public } from "../../common/decorators/public.decorator";
 
 @ApiTags("Companies")
 @Controller("companies")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
@@ -131,7 +132,7 @@ export class CompaniesController {
   }
 
   @Get("my-company")
-  @RequireAuth("company.read")
+  @Permissions("company.read")
   @UseInterceptors(CacheInterceptor)
   @CacheKey("company:{companyId}:details")
   @CacheTTL(600) // 10 minutes

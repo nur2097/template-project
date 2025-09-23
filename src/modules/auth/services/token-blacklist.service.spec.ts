@@ -4,6 +4,7 @@ import { Cache } from "cache-manager";
 import { JwtService } from "@nestjs/jwt";
 import { TokenBlacklistService } from "./token-blacklist.service";
 import { ConfigurationService } from "@config/configuration.service";
+import { PrismaService } from "../../../shared/database/prisma.service";
 
 describe("TokenBlacklistService", () => {
   let service: TokenBlacklistService;
@@ -42,6 +43,16 @@ describe("TokenBlacklistService", () => {
           provide: JwtService,
           useValue: {
             decode: jest.fn(),
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            blacklistedToken: {
+              create: jest.fn(),
+              findFirst: jest.fn(),
+              deleteMany: jest.fn(),
+            },
           },
         },
       ],

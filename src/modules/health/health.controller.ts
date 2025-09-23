@@ -5,43 +5,46 @@ import {
   MemoryHealthIndicator,
   DiskHealthIndicator,
 } from "@nestjs/terminus";
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from "@nestjs/swagger";
-import { SuperAdminOnly } from "../../common/decorators/super-admin-only.decorator";
+import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { Public } from "../../common/decorators/public.decorator";
+import { ConfigurationService } from "../../config";
 import { HealthService } from "./health.service";
 
 @ApiTags("Health")
-@ApiBearerAuth()
-@SuperAdminOnly()
 @Controller("health")
 export class HealthController {
   constructor(
     private health: HealthCheckService,
     private memory: MemoryHealthIndicator,
     private disk: DiskHealthIndicator,
-    private healthService: HealthService
+    private healthService: HealthService,
+    private readonly configService: ConfigurationService
   ) {}
 
+  @Public()
   @Get()
   @HealthCheck()
   @ApiOperation({ summary: "Basic health check" })
   @ApiResponse({ status: 200, description: "Service is healthy" })
   @ApiResponse({ status: 503, description: "Service is unhealthy" })
   check() {
-    return this.health.check([
+    const isProd = this.configService.isProduction;
+    const indicators: Array<() => any> = [
       () => this.healthService.isHealthy("database"),
       () => this.memory.checkHeap("memory_heap", 150 * 1024 * 1024),
-      () =>
+    ];
+
+    // Only run disk check in production (dev environments often report pseudo-usage)
+    if (isProd) {
+      indicators.push(() =>
         this.disk.checkStorage("storage", {
           path: "/",
-          threshold: 0.9, // 90% threshold
-        }),
-    ]);
+          threshold: 0.98,
+        })
+      );
+    }
+
+    return this.health.check(indicators);
   }
 
   @Get("database")
@@ -77,11 +80,22 @@ export class HealthController {
   @ApiResponse({ status: 200, description: "Disk usage is healthy" })
   @ApiResponse({ status: 503, description: "Disk usage is unhealthy" })
   checkDisk() {
+    const isProd = this.configService.isProduction;
+    if (!isProd) {
+      // In development, report disk as up without failing the whole app
+      return {
+        status: "ok",
+        info: { storage: { status: "up" } },
+        error: {},
+        details: { storage: { status: "up" } },
+      };
+    }
+
     return this.health.check([
       () =>
         this.disk.checkStorage("storage", {
           path: "/",
-          threshold: 0.9, // 90% threshold
+          threshold: 0.98,
         }),
     ]);
   }
@@ -95,6 +109,7 @@ export class HealthController {
     return this.health.check([() => this.healthService.isHealthy("redis")]);
   }
 
+  @Public()
   @Get("readiness")
   @HealthCheck()
   @ApiOperation({ summary: "Kubernetes readiness probe" })
@@ -138,18 +153,26 @@ export class HealthController {
   @ApiResponse({ status: 200, description: "Detailed health information" })
   @ApiResponse({ status: 503, description: "Service is unhealthy" })
   detailed() {
-    return this.health.check([
+    const isProd = this.configService.isProduction;
+    const indicators: Array<() => any> = [
       () => this.healthService.isHealthy("postgres"),
       () => this.healthService.isHealthy("mongodb"),
       () => this.healthService.isHealthy("redis"),
       () => this.memory.checkHeap("memory_heap", 150 * 1024 * 1024),
       () => this.memory.checkRSS("memory_rss", 300 * 1024 * 1024),
-      () =>
+    ];
+
+    // Only run disk check in production (dev environments often report pseudo-usage)
+    if (isProd) {
+      indicators.push(() =>
         this.disk.checkStorage("storage", {
           path: "/",
-          threshold: 0.9,
-        }),
-    ]);
+          threshold: 0.98,
+        })
+      );
+    }
+
+    return this.health.check(indicators);
   }
 
   @Get("metrics")

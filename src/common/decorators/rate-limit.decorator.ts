@@ -42,11 +42,11 @@ export const RateLimit = (options: RateLimitOptions) =>
 export class RateLimitPresets {
   /**
    * Strict rate limiting for login attempts
-   * 5 attempts per 15 minutes
+   * 5 attempts per 15 minutes in production, 100 in development
    */
   static readonly LOGIN = {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5,
+    max: process.env.NODE_ENV === "production" ? 5 : 100,
     message: "Too many login attempts, please try again in 15 minutes",
     keyGenerator: (req: Request) => {
       const ip = req.ip || req.socket.remoteAddress || "unknown";
@@ -57,11 +57,11 @@ export class RateLimitPresets {
 
   /**
    * Medium rate limiting for registration
-   * 3 attempts per hour
+   * 3 attempts per hour in production, 50 in development
    */
   static readonly REGISTER = {
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3,
+    max: process.env.NODE_ENV === "production" ? 3 : 50,
     message: "Too many registration attempts, please try again later",
     keyGenerator: (req: Request) => {
       const ip = req.ip || req.socket.remoteAddress || "unknown";
@@ -108,6 +108,9 @@ export class RateLimitPresets {
     max: 2,
     message:
       "Too many company registration attempts, please try again tomorrow",
+    // In development and test environments, skip company registration rate limit
+    // to allow iterative testing without waiting for the window to reset.
+    skip: () => process.env.NODE_ENV !== "production",
     keyGenerator: (req: Request) => {
       const ip = req.ip || req.socket.remoteAddress || "unknown";
       return `company_register:${ip}`;

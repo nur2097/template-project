@@ -38,7 +38,7 @@ import { UsersService } from "./users.service";
 
 @ApiTags("Users")
 @Controller("users")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

@@ -38,6 +38,9 @@ export class EnhancedRateLimitGuard implements CanActivate {
 
     // Check if request should be skipped
     if (rateLimitOptions.skip && rateLimitOptions.skip(request)) {
+      this.logger.debug(
+        `Rate limit skipped for NODE_ENV: ${process.env.NODE_ENV}`
+      );
       return true;
     }
 

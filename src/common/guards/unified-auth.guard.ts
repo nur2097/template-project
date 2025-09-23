@@ -47,17 +47,22 @@ export class UnifiedAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+
     // 1. PUBLIC ENDPOINT CHECK
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
+    this.logger.debug(
+      `UnifiedAuthGuard: ${request.method} ${request.path} - isPublic: ${isPublic}`
+    );
+
     if (isPublic) {
+      this.logger.debug(`Public endpoint, allowing access: ${request.path}`);
       return true;
     }
-
-    const request = context.switchToHttp().getRequest();
 
     // 2. JWT AUTHENTICATION
     const user = await this.authenticateUser(request);
@@ -128,27 +133,14 @@ export class UnifiedAuthGuard implements CanActivate {
     }
   }
 
-  private processAuthRequirements(
-    requirements: AuthRequirement[],
-    user: any
-  ): boolean {
-    for (const requirement of requirements) {
-      if (!this.checkSingleAuthRequirement(requirement, user)) {
-        const errorMessage = this.buildRequirementErrorMessage(
-          requirement,
-          user
-        );
-        this.logger.warn(`Access denied for user ${user.sub}: ${errorMessage}`);
-        throw new ForbiddenException(errorMessage);
-      }
-    }
-    return true;
-  }
-
   private buildRequirementErrorMessage(
     requirement: AuthRequirement,
     user: any
   ): string {
+    this.logger.debug(
+      `Building error message for requirement: ${JSON.stringify(requirement)}, type: ${typeof requirement}, isArray: ${Array.isArray(requirement)}`
+    );
+
     if (Array.isArray(requirement)) {
       return `Missing required combination: ${requirement.join(" AND ")}`;
     }
@@ -169,6 +161,10 @@ export class UnifiedAuthGuard implements CanActivate {
     requirement: AuthRequirement,
     user: any
   ): boolean {
+    this.logger.debug(
+      `checkSingleAuthRequirement called with: ${JSON.stringify(requirement)}, type: ${typeof requirement}`
+    );
+
     if (Array.isArray(requirement)) {
       // AND logic - all must pass
       return requirement.every((req) =>
@@ -177,6 +173,8 @@ export class UnifiedAuthGuard implements CanActivate {
     }
 
     if (typeof requirement === "string") {
+      this.logger.debug(`Processing string requirement: "${requirement}"`);
+
       // System role check
       if (["SUPERADMIN", "ADMIN", "MODERATOR", "USER"].includes(requirement)) {
         return this.hasSystemRole(
@@ -187,6 +185,7 @@ export class UnifiedAuthGuard implements CanActivate {
 
       // Permission check
       if (requirement.includes(".")) {
+        this.logger.debug(`Permission check for: "${requirement}"`);
         return this.hasPermission(requirement, user);
       }
 
@@ -196,6 +195,9 @@ export class UnifiedAuthGuard implements CanActivate {
       }
     }
 
+    this.logger.debug(
+      `No match found for requirement: ${JSON.stringify(requirement)}`
+    );
     return false;
   }
 
@@ -214,7 +216,14 @@ export class UnifiedAuthGuard implements CanActivate {
       return true;
     }
 
-    return user.permissions?.includes(permission) || false;
+    this.logger.debug(
+      `Checking permission "${permission}" for user ${user.sub}. User permissions: ${JSON.stringify(user.permissions)}`
+    );
+
+    const hasPermission = user.permissions?.includes(permission) || false;
+    this.logger.debug(`Permission check result: ${hasPermission}`);
+
+    return hasPermission;
   }
 
   private enforceCompanyIsolation(request: any, user: any): void {
@@ -419,13 +428,43 @@ export class UnifiedAuthGuard implements CanActivate {
     user: any
   ): Promise<void> {
     // Check @RequireAuth decorator
-    const authRequirements = this.reflector.getAllAndMerge<AuthRequirement[]>(
+    const handlerAuth = this.reflector.get<AuthRequirement>(
       REQUIRE_AUTH_KEY,
-      [context.getHandler(), context.getClass()]
+      context.getHandler()
+    );
+    const classAuth = this.reflector.get<AuthRequirement>(
+      REQUIRE_AUTH_KEY,
+      context.getClass()
     );
 
-    if (authRequirements && authRequirements.length > 0) {
-      this.processAuthRequirements(authRequirements, user);
+    this.logger.debug(
+      `Handler auth: ${JSON.stringify(handlerAuth)}, Class auth: ${JSON.stringify(classAuth)}`
+    );
+
+    // Process individual auth requirements
+    if (handlerAuth) {
+      this.logger.debug(
+        `Processing handler auth requirement: ${JSON.stringify(handlerAuth)}`
+      );
+      if (!this.checkSingleAuthRequirement(handlerAuth, user)) {
+        const errorMessage = this.buildRequirementErrorMessage(
+          handlerAuth,
+          user
+        );
+        this.logger.warn(`Access denied for user ${user.sub}: ${errorMessage}`);
+        throw new ForbiddenException(errorMessage);
+      }
+    }
+
+    if (classAuth && !handlerAuth) {
+      this.logger.debug(
+        `Processing class auth requirement: ${JSON.stringify(classAuth)}`
+      );
+      if (!this.checkSingleAuthRequirement(classAuth, user)) {
+        const errorMessage = this.buildRequirementErrorMessage(classAuth, user);
+        this.logger.warn(`Access denied for user ${user.sub}: ${errorMessage}`);
+        throw new ForbiddenException(errorMessage);
+      }
     }
 
     // Check @Permissions decorator

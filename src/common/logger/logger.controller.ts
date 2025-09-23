@@ -12,7 +12,7 @@ import { SuperAdminOnly } from "../../common/decorators/super-admin-only.decorat
 
 @ApiTags("Logger")
 @Controller("logger")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 @SuperAdminOnly()
 export class LoggerController {
   constructor(private loggerService: LoggerService) {}

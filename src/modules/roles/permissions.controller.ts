@@ -42,7 +42,7 @@ export class PermissionResponseDto {
 
 @ApiTags("Permissions")
 @Controller("permissions")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class PermissionsController {
   constructor(private readonly rolesService: RolesService) {}
 

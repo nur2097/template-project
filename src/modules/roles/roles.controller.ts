@@ -36,7 +36,7 @@ import {
 
 @ApiTags("Roles")
 @Controller("roles")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 

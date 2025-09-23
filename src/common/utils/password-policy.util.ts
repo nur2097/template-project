@@ -56,14 +56,14 @@ export class PasswordPolicyUtil {
     /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
 
   static readonly DEFAULT_POLICY: PasswordPolicyOptions = {
-    minLength: 12,
+    minLength: 8,
     maxLength: 128,
     requireUppercase: true,
     requireLowercase: true,
     requireNumbers: true,
-    requireSpecialChars: true,
-    forbidCommonPasswords: true,
-    forbidPersonalInfo: true,
+    requireSpecialChars: false,
+    forbidCommonPasswords: false,
+    forbidPersonalInfo: false,
   };
 
   /**

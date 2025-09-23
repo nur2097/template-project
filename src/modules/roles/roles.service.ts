@@ -695,8 +695,14 @@ export class RolesService {
   /**
    * Remove role from user and invalidate their tokens
    */
-  async removeRoleFromUser(userId: number, roleId: number, companyId: number): Promise<void> {
-    this.logger.log(`Removing role ${roleId} from user ${userId} in company ${companyId}`);
+  async removeRoleFromUser(
+    userId: number,
+    roleId: number,
+    companyId: number
+  ): Promise<void> {
+    this.logger.log(
+      `Removing role ${roleId} from user ${userId} in company ${companyId}`
+    );
 
     // Verify both user and role belong to the same company for security
     const userRole = await this.prisma.userRole.findFirst({
@@ -704,12 +710,14 @@ export class RolesService {
         userId,
         roleId,
         user: { companyId },
-        role: { companyId }
+        role: { companyId },
       },
     });
 
     if (!userRole) {
-      this.logger.warn(`Role ${roleId} is not assigned to user ${userId} in company ${companyId}`);
+      this.logger.warn(
+        `Role ${roleId} is not assigned to user ${userId} in company ${companyId}`
+      );
       return;
     }
 

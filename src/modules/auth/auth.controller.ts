@@ -154,7 +154,7 @@ export class AuthController {
   }
 
   @Get("profile")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @ApiOperation({ summary: "Get current user profile" })
   @ApiResponse({
     status: 200,
@@ -173,7 +173,7 @@ export class AuthController {
   }
 
   @Post("logout")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "User logout" })
   @ApiResponse({
@@ -195,7 +195,7 @@ export class AuthController {
   }
 
   @Post("logout-all")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Logout from all devices" })
   @ApiResponse({
@@ -212,7 +212,7 @@ export class AuthController {
   }
 
   @Post("logout-other-devices")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Logout from all other devices except current" })
   @ApiResponse({
@@ -230,7 +230,7 @@ export class AuthController {
   }
 
   @Get("devices")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @ApiOperation({ summary: "Get user active devices and sessions" })
   @ApiResponse({ status: 200, description: "Devices retrieved successfully" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
@@ -240,7 +240,7 @@ export class AuthController {
   }
 
   @Post("revoke-device")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Revoke access from specific device" })
   @ApiResponse({
@@ -317,7 +317,7 @@ export class AuthController {
   }
 
   @Post("change-password")
-  @ApiBearerAuth()
+  @ApiBearerAuth("JWT-Auth")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Change current password" })
   @ApiResponse({ status: 200, description: "Password changed successfully" })

@@ -29,7 +29,7 @@ import {
 
 @ApiTags("Role Templates")
 @Controller("role-templates")
-@ApiBearerAuth()
+@ApiBearerAuth("JWT-Auth")
 export class RoleTemplatesController {
   constructor(
     private readonly roleTemplatesService: RoleTemplatesService,

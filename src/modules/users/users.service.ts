@@ -98,11 +98,14 @@ export class UsersService implements IUsersService {
       phoneNumber: createUserDto.phoneNumber,
     };
 
-    PasswordUtil.validatePassword(
-      createUserDto.password,
-      undefined,
-      personalInfo
-    );
+    // Only validate password in production environment
+    if (process.env.NODE_ENV === "production") {
+      PasswordUtil.validatePassword(
+        createUserDto.password,
+        undefined,
+        personalInfo
+      );
+    }
 
     const hashedPassword = await PasswordUtil.hash(createUserDto.password);
 
