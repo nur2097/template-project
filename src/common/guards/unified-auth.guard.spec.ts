@@ -35,6 +35,7 @@ describe("UnifiedAuthGuard", () => {
           useValue: {
             getAllAndOverride: jest.fn(),
             getAllAndMerge: jest.fn(),
+            get: jest.fn(),
           },
         },
         {

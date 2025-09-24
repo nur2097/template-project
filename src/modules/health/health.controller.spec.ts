@@ -2,6 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { HealthController } from "./health.controller";
 import { HealthService } from "./health.service";
 import { TerminusModule } from "@nestjs/terminus";
+import { ConfigurationService } from "../../config/configuration.service";
 
 describe("HealthController", () => {
   let controller: HealthController;
@@ -15,6 +16,12 @@ describe("HealthController", () => {
       checkMemory: jest.fn(),
     };
 
+    const mockConfigurationService = {
+      redisHost: 'localhost',
+      redisPort: 6379,
+      databaseUrl: 'postgresql://test:test@localhost:5432/test',
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthController],
       imports: [TerminusModule],
@@ -22,6 +29,10 @@ describe("HealthController", () => {
         {
           provide: HealthService,
           useValue: mockHealthService,
+        },
+        {
+          provide: ConfigurationService,
+          useValue: mockConfigurationService,
         },
       ],
     }).compile();
